@@ -137,6 +137,119 @@ export default function KeyMetrics({ data }: KeyMetricsProps) {
     return openUnpaidRowCount
   })()
 
+  const closedUnpaidClaimCount = (() => {
+    if (!statusColumn) {
+      return 0
+    }
+
+    const paidColumnForUnpaidCheck = directLossPaidColumn
+    const closedUnpaidClaimIds = new Set<string>()
+    let closedUnpaidRowCount = 0
+
+    data.forEach((row) => {
+      const statusBucket = getStatusBucket(row[statusColumn])
+      if (statusBucket !== 'closed') {
+        return
+      }
+
+      const paidAmount = paidColumnForUnpaidCheck ? parseNumber(row[paidColumnForUnpaidCheck]) : 0
+      if (paidAmount > 0) {
+        return
+      }
+
+      if (claimNumberColumn) {
+        const claimId = String(row[claimNumberColumn] ?? '').trim()
+        if (claimId) {
+          closedUnpaidClaimIds.add(claimId)
+          return
+        }
+      }
+
+      closedUnpaidRowCount += 1
+    })
+
+    if (claimNumberColumn) {
+      return closedUnpaidClaimIds.size
+    }
+
+    return closedUnpaidRowCount
+  })()
+
+  const openWithPayClaimCount = (() => {
+    if (!statusColumn || !directLossPaidColumn) {
+      return 0
+    }
+
+    const openWithPayClaimIds = new Set<string>()
+    let openWithPayRowCount = 0
+
+    data.forEach((row) => {
+      const statusBucket = getStatusBucket(row[statusColumn])
+      if (statusBucket !== 'open') {
+        return
+      }
+
+      const paidAmount = parseNumber(row[directLossPaidColumn])
+      if (paidAmount <= 0) {
+        return
+      }
+
+      if (claimNumberColumn) {
+        const claimId = String(row[claimNumberColumn] ?? '').trim()
+        if (claimId) {
+          openWithPayClaimIds.add(claimId)
+          return
+        }
+      }
+
+      openWithPayRowCount += 1
+    })
+
+    if (claimNumberColumn) {
+      return openWithPayClaimIds.size
+    }
+
+    return openWithPayRowCount
+  })()
+
+  const openWithPayFinancials = (() => {
+    if (!statusColumn || !directLossPaidColumn) {
+      return { paidItdTotal: 0, reserveOutstandingTotal: 0 }
+    }
+
+    const seenClaimIds = new Set<string>()
+    let paidItdTotal = 0
+    let reserveOutstandingTotal = 0
+
+    data.forEach((row) => {
+      const statusBucket = getStatusBucket(row[statusColumn])
+      if (statusBucket !== 'open') {
+        return
+      }
+
+      const paidAmount = parseNumber(row[directLossPaidColumn])
+      if (paidAmount <= 0) {
+        return
+      }
+
+      if (claimNumberColumn) {
+        const claimId = String(row[claimNumberColumn] ?? '').trim()
+        if (!claimId || seenClaimIds.has(claimId)) {
+          return
+        }
+        seenClaimIds.add(claimId)
+      }
+
+      paidItdTotal += paidAmount
+      reserveOutstandingTotal += reserveOutstandingColumn ? parseNumber(row[reserveOutstandingColumn]) : 0
+    })
+
+    return {
+      paidItdTotal,
+      reserveOutstandingTotal,
+    }
+  })()
+
   return (
     <section className="kpi-section">
       <div className="kpi-header">
@@ -157,8 +270,28 @@ export default function KeyMetrics({ data }: KeyMetricsProps) {
         </article>
 
         <article className="kpi-card">
-          <p className="kpi-label">Open Unpaid</p>
+          <p className="kpi-label">Claims Open Without Pay</p>
           <p className="kpi-value">{formatInteger(openUnpaidClaimCount)}</p>
+        </article>
+
+        <article className="kpi-card">
+          <p className="kpi-label">Claims Closed Without Pay</p>
+          <p className="kpi-value">{formatInteger(closedUnpaidClaimCount)}</p>
+        </article>
+
+        <article className="kpi-card">
+          <p className="kpi-label">Claims Open With Pay</p>
+          <p className="kpi-value">{formatInteger(openWithPayClaimCount)}</p>
+        </article>
+
+        <article className="kpi-card">
+          <p className="kpi-label">Open With Pay - Paid ITD</p>
+          <p className="kpi-value">{formatCurrency(openWithPayFinancials.paidItdTotal)}</p>
+        </article>
+
+        <article className="kpi-card">
+          <p className="kpi-label">Open With Pay - Direct Loss Reserve Outstanding</p>
+          <p className="kpi-value">{formatCurrency(openWithPayFinancials.reserveOutstandingTotal)}</p>
         </article>
 
         <article className="kpi-card">

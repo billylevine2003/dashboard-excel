@@ -554,6 +554,22 @@
   text-align: right;
 }
 
+.matrix-table th,
+.matrix-table td {
+  text-align: center;
+}
+
+.matrix-table th:first-child,
+.matrix-table td:first-child {
+  text-align: left;
+}
+
+.matrix-total-row td {
+  font-weight: 700;
+  background-color: #f1f4ff;
+  border-top: 2px solid #d8e0ff;
+}
+
 /* Key Metrics */
 .kpi-section {
   background: white;
