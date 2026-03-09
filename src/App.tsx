@@ -7,10 +7,70 @@ import FileUpload from './components/FileUpload'
 import FilterSearch from './components/FilterSearch'
 import Slicers from './components/Slicers'
 import LeftPanel from './components/LeftPanel'
+import KeyMetrics from './components/KeyMetrics'
 import './App.css'
 
 interface ExcelData {
   [key: string]: any[]
+}
+
+const isDateLikeField = (fieldName: string): boolean =>
+  fieldName.trim().toLowerCase().includes('date')
+
+const formatExcelDateValue = (value: unknown): unknown => {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return value
+  }
+
+  const parsed = XLSX.SSF.parse_date_code(value)
+  if (!parsed || !parsed.y || !parsed.m || !parsed.d) {
+    return value
+  }
+
+  const year = String(parsed.y).padStart(4, '0')
+  const month = String(parsed.m).padStart(2, '0')
+  const day = String(parsed.d).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+const extractMonthYear = (value: unknown): string | null => {
+  if (typeof value === 'string') {
+    const match = value.match(/^(\d{4})-(\d{2})-\d{2}$/)
+    if (match) {
+      return `${match[1]}-${match[2]}`
+    }
+  }
+
+  if (value instanceof Date) {
+    const year = String(value.getFullYear())
+    const month = String(value.getMonth() + 1).padStart(2, '0')
+    return `${year}-${month}`
+  }
+
+  return null
+}
+
+const normalizeDateFieldsInRow = (row: Record<string, unknown>): Record<string, unknown> => {
+  const normalized: Record<string, unknown> = { ...row }
+
+  Object.keys(normalized).forEach((key) => {
+    if (isDateLikeField(key)) {
+      normalized[key] = formatExcelDateValue(normalized[key])
+    }
+  })
+
+  const claimReportedDateKey = Object.keys(normalized).find(
+    (key) => key.trim().toLowerCase() === 'claim reported date'
+  )
+
+  if (claimReportedDateKey) {
+    const monthYear = extractMonthYear(normalized[claimReportedDateKey])
+    if (monthYear) {
+      normalized['Claim Reported Month-Year'] = monthYear
+    }
+  }
+
+  return normalized
 }
 
 function App() {
@@ -24,6 +84,7 @@ function App() {
   const [slicerConfig, setSlicerConfig] = useState<any>(null)
   const [visibleColumns, setVisibleColumns] = useState<string[]>([])
   const [panelFilters, setPanelFilters] = useState<{ [key: string]: string[] }>({})
+  const [isLeftSidebarCollapsed, setIsLeftSidebarCollapsed] = useState<boolean>(false)
 
   const handleFileUpload = (file: File) => {
     const reader = new FileReader()
@@ -33,7 +94,8 @@ function App() {
         const sheets: ExcelData = {}
         
         workbook.SheetNames.forEach((name) => {
-          sheets[name] = XLSX.utils.sheet_to_json(workbook.Sheets[name])
+          const rawRows = XLSX.utils.sheet_to_json(workbook.Sheets[name]) as Record<string, unknown>[]
+          sheets[name] = rawRows.map((row) => normalizeDateFieldsInRow(row))
         })
         
         setData(sheets)
@@ -96,15 +158,6 @@ function App() {
         }
       })
 
-      // Multi-select filters
-      Object.entries(config.multiSelect).forEach(([colName, selectedValues]: any) => {
-        if (selectedValues.length > 0) {
-          filtered = filtered.filter((row) =>
-            selectedValues.includes(String(row[colName]))
-          )
-        }
-      })
-
       // Date range filter
       if (config.dateRange) {
         const { column, start, end } = config.dateRange
@@ -155,11 +208,42 @@ function App() {
 
         {data && (
           <div className="main-content">
-            <LeftPanel
-              data={data[activeSheet] || []}
-              filters={panelFilters}
-              onFilterChange={handlePanelFilterChange}
-            />
+            <div className="left-sidebar">
+              <div className="left-sidebar-header">
+                <h2>Filters</h2>
+                <button
+                  type="button"
+                  className="left-sidebar-toggle"
+                  onClick={() => setIsLeftSidebarCollapsed((prev) => !prev)}
+                >
+                  {isLeftSidebarCollapsed ? 'Show' : 'Hide'}
+                </button>
+              </div>
+
+              {!isLeftSidebarCollapsed && (
+                <>
+                  {currentData && (
+                    <>
+                      <FilterSearch
+                        data={currentData}
+                        onFilter={handleFilter}
+                        onExport={handleExport}
+                        visibleColumns={visibleColumns}
+                        onColumnsChange={setVisibleColumns}
+                      />
+
+                      <Slicers data={currentData} onFilter={handleSlicerFilter} />
+                    </>
+                  )}
+
+                  <LeftPanel
+                    data={data[activeSheet] || []}
+                    filters={panelFilters}
+                    onFilterChange={handlePanelFilterChange}
+                  />
+                </>
+              )}
+            </div>
 
             <div className="right-content">
               <div className="tabs">
@@ -183,15 +267,7 @@ function App() {
 
               {currentData && (
                 <>
-                  <FilterSearch
-                    data={currentData}
-                    onFilter={handleFilter}
-                    onExport={handleExport}
-                    visibleColumns={visibleColumns}
-                    onColumnsChange={setVisibleColumns}
-                  />
-
-                  <Slicers data={currentData} onFilter={handleSlicerFilter} />
+                  <KeyMetrics data={filteredData || currentData} />
 
                   <div className="view-toggle">
                     <button

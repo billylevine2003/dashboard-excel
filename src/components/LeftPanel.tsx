@@ -45,22 +45,22 @@ export default function LeftPanel({
     return values
   }, [data])
 
-  const handleToggle = (fieldName: string, value: string) => {
-    const currentFilters = filters[fieldName] || []
+  const handleToggle = (sourceColumn: string, value: string) => {
+    const currentFilters = filters[sourceColumn] || []
     const newFilters = { ...filters }
 
     if (currentFilters.includes(value)) {
-      newFilters[fieldName] = currentFilters.filter((v) => v !== value)
+      newFilters[sourceColumn] = currentFilters.filter((v) => v !== value)
     } else {
-      newFilters[fieldName] = [...currentFilters, value]
+      newFilters[sourceColumn] = [...currentFilters, value]
     }
 
     onFilterChange(newFilters)
   }
 
-  const handleClearAll = (fieldName: string) => {
+  const handleClearAll = (sourceColumn: string) => {
     const newFilters = { ...filters }
-    newFilters[fieldName] = []
+    newFilters[sourceColumn] = []
     onFilterChange(newFilters)
   }
 
@@ -68,7 +68,7 @@ export default function LeftPanel({
     <div className="left-panel">
       <h2>Filters</h2>
 
-      {FILTER_FIELDS.map(({ name }) => (
+      {FILTER_FIELDS.map(({ name, sourceColumn }) => (
         <div key={name} className="filter-group-panel">
           <div className="filter-group-header">
             <h3>{name}</h3>
@@ -80,9 +80,9 @@ export default function LeftPanel({
               >
                 {collapsedSections[name] ? '▶' : '▼'}
               </button>
-              {(filters[name]?.length || 0) > 0 && (
+              {(filters[sourceColumn]?.length || 0) > 0 && (
                 <button
-                  onClick={() => handleClearAll(name)}
+                  onClick={() => handleClearAll(sourceColumn)}
                   className="clear-filter-btn"
                   title="Clear filters"
                 >
@@ -99,8 +99,8 @@ export default function LeftPanel({
                   <label key={value} className="filter-checkbox-label">
                     <input
                       type="checkbox"
-                      checked={(filters[name] || []).includes(value)}
-                      onChange={() => handleToggle(name, value)}
+                      checked={(filters[sourceColumn] || []).includes(value)}
+                      onChange={() => handleToggle(sourceColumn, value)}
                     />
                     <span className="checkbox-text">{value}</span>
                   </label>

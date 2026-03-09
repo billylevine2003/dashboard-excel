@@ -23,23 +23,68 @@ interface ChartsProps {
 
 const COLORS = ['#8884d8', '#82ca9d', '#ffc658', '#ff7c7c', '#8dd1e1']
 
+const parseDateLabel = (value: string): number | null => {
+  const trimmed = value.trim()
+
+  const isoDate = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  if (isoDate) {
+    const timestamp = new Date(`${isoDate[1]}-${isoDate[2]}-${isoDate[3]}T00:00:00Z`).getTime()
+    return Number.isNaN(timestamp) ? null : timestamp
+  }
+
+  const isoMonth = trimmed.match(/^(\d{4})-(\d{2})$/)
+  if (isoMonth) {
+    const timestamp = new Date(`${isoMonth[1]}-${isoMonth[2]}-01T00:00:00Z`).getTime()
+    return Number.isNaN(timestamp) ? null : timestamp
+  }
+
+  const monthYear = trimmed.match(/^([A-Za-z]{3,9})\s+([0-9]{2,4})$/)
+  if (monthYear) {
+    const yearPart = monthYear[2].length === 2 ? `20${monthYear[2]}` : monthYear[2]
+    const timestamp = new Date(`${monthYear[1]} 1, ${yearPart}`).getTime()
+    return Number.isNaN(timestamp) ? null : timestamp
+  }
+
+  const parsed = Date.parse(trimmed)
+  if (!Number.isNaN(parsed)) {
+    return parsed
+  }
+
+  return null
+}
+
 export default function Charts({ data, xAxisKey, numericKeys }: ChartsProps) {
   const [selectedNumericKeys, setSelectedNumericKeys] = useState<string[]>([])
   const [selectedGroupBy, setSelectedGroupBy] = useState<string>('')
 
-  const { numericData, allNumericColumns, stringColumns, xAxis } = useMemo(() => {
+  const { allNumericColumns, stringColumns, xAxis } = useMemo(() => {
     if (!data || data.length === 0)
-      return { numericData: null, allNumericColumns: [], stringColumns: [], xAxis: '' }
+      return { allNumericColumns: [], stringColumns: [], xAxis: '' }
 
-    // Find all numeric columns
+    const isDateColumn = (col: string) => {
+      const normalized = col.trim().toLowerCase()
+      return normalized.includes('date')
+    }
+
+    // Find all numeric columns (exclude Claim Number and any date-like fields)
     const columns = Object.keys(data[0])
     const numericColumns = columns.filter((col) => {
-      return data.some((row) => typeof row[col] === 'number')
+      const normalized = col.trim().toLowerCase()
+      return (
+        normalized !== 'claim number' &&
+        !isDateColumn(col) &&
+        data.some((row) => typeof row[col] === 'number')
+      )
     })
+    
+    // Add Count as a virtual metric
+    numericColumns.push('Count')
 
-    // Find all string columns for grouping
+    // Include any date-like column in category grouping, even if values are numeric.
     const stringCols = columns.filter((col) => {
-      return data.some((row) => typeof row[col] === 'string')
+      const isDateField = isDateColumn(col)
+      const isStringType = data.some((row) => typeof row[col] === 'string')
+      return (isDateField || (col !== 'Loss cause' && isStringType))
     })
 
     // Use provided xAxisKey or find first string column
@@ -53,6 +98,63 @@ export default function Charts({ data, xAxisKey, numericKeys }: ChartsProps) {
     }
   }, [data, xAxisKey])
 
+  // Group and aggregate data by selected category
+  const groupedData = useMemo(() => {
+    if (!selectedGroupBy || !data || data.length === 0) {
+      return data.slice(0, 10)
+    }
+
+    const grouped: { [key: string]: any } = {}
+
+    // Group data by the selected category
+    data.forEach((row) => {
+      const groupKey = String(row[selectedGroupBy])
+      if (!grouped[groupKey]) {
+        grouped[groupKey] = { [selectedGroupBy]: groupKey, Count: 0 }
+        // Initialize numeric columns
+        allNumericColumns.forEach((col) => {
+          grouped[groupKey][col] = 0
+        })
+      }
+      // Increment count for this group
+      grouped[groupKey]['Count'] += 1
+      // Sum numeric values
+      allNumericColumns.forEach((col) => {
+        if (typeof row[col] === 'number') {
+          grouped[groupKey][col] += row[col]
+        }
+      })
+    })
+
+    const rows = Object.values(grouped)
+    const isDateLikeGroup = /date|month|year/i.test(selectedGroupBy)
+
+    return rows.sort((a: any, b: any) => {
+      const aLabel = String(a[selectedGroupBy] ?? '')
+      const bLabel = String(b[selectedGroupBy] ?? '')
+
+      if (isDateLikeGroup) {
+        const aDate = parseDateLabel(aLabel)
+        const bDate = parseDateLabel(bLabel)
+        if (aDate !== null && bDate !== null) {
+          return aDate - bDate
+        }
+      }
+
+      const aNumber = Number(aLabel)
+      const bNumber = Number(bLabel)
+      const bothNumbers = !Number.isNaN(aNumber) && !Number.isNaN(bNumber)
+      if (bothNumbers) {
+        return aNumber - bNumber
+      }
+
+      return aLabel.localeCompare(bLabel, undefined, {
+        numeric: true,
+        sensitivity: 'base',
+      })
+    })
+  }, [data, selectedGroupBy, allNumericColumns])
+
   // Initialize selected keys if not set
   useMemo(() => {
     if (selectedNumericKeys.length === 0 && numericKeys && numericKeys.length > 0) {
@@ -65,7 +167,7 @@ export default function Charts({ data, xAxisKey, numericKeys }: ChartsProps) {
     }
   }, [allNumericColumns, numericKeys, selectedNumericKeys])
 
-  if (!numericData || allNumericColumns.length === 0) {
+  if (!groupedData || allNumericColumns.length === 0) {
     return (
       <div className="charts-container">
         <p>No numeric data available for charts</p>
@@ -128,9 +230,9 @@ export default function Charts({ data, xAxisKey, numericKeys }: ChartsProps) {
           <div className="chart">
             <h3>Bar Chart</h3>
             <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={numericData}>
+              <BarChart data={groupedData}>
                 <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey={xAxis} />
+                <XAxis dataKey={selectedGroupBy || xAxis} />
                 <YAxis />
                 <Tooltip />
                 <Legend />
@@ -148,9 +250,9 @@ export default function Charts({ data, xAxisKey, numericKeys }: ChartsProps) {
           <div className="chart">
             <h3>Line Chart</h3>
             <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={numericData}>
+              <LineChart data={groupedData}>
                 <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey={xAxis} />
+                <XAxis dataKey={selectedGroupBy || xAxis} />
                 <YAxis />
                 <Tooltip />
                 <Legend />
@@ -172,14 +274,14 @@ export default function Charts({ data, xAxisKey, numericKeys }: ChartsProps) {
               <ResponsiveContainer width="100%" height={300}>
                 <PieChart>
                   <Pie
-                    data={numericData}
+                    data={groupedData}
                     dataKey={selectedNumericKeys[0]}
-                    nameKey={xAxis}
+                    nameKey={selectedGroupBy || xAxis}
                     cx="50%"
                     cy="50%"
                     label
                   >
-                    {numericData.map((_entry, index) => (
+                    {groupedData.map((_entry, index) => (
                       <Cell
                         key={`cell-${index}`}
                         fill={COLORS[index % COLORS.length]}

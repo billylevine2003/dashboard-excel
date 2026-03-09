@@ -5,13 +5,36 @@ interface PivotTableProps {
   visibleColumns: string[]
 }
 
+interface GroupedPivotRow {
+  key: string
+  label: string
+  values: { [key: string]: string }
+  children: GroupedPivotRow[]
+}
+
+const isDateLikeField = (fieldName: string): boolean =>
+  fieldName.trim().toLowerCase().includes('date')
+
+const formatAggregateValue = (value: number, aggregationType: 'sum' | 'count' | 'avg'): string => {
+  if (aggregationType === 'count') {
+    return String(Math.round(value))
+  }
+  return value.toFixed(2)
+}
+
 export default function PivotTable({
   data,
   visibleColumns,
 }: PivotTableProps) {
-  const [groupByField, setGroupByField] = useState<string>('')
-  const [aggregateField, setAggregateField] = useState<string>('')
-  const [aggregationType, setAggregationType] = useState<'sum' | 'count' | 'avg'>(
+  const [parentGroupByField, setParentGroupByField] = useState<string>('')
+  const [childGroupByField, setChildGroupByField] = useState<string>('')
+  const [aggregateField1, setAggregateField1] = useState<string>('')
+  const [aggregateField2, setAggregateField2] = useState<string>('')
+  const [collapsedParents, setCollapsedParents] = useState<{ [key: string]: boolean }>({})
+  const [aggregationType1, setAggregationType1] = useState<'sum' | 'count' | 'avg'>(
+    'sum'
+  )
+  const [aggregationType2, setAggregationType2] = useState<'sum' | 'count' | 'avg'>(
     'sum'
   )
 
@@ -21,53 +44,129 @@ export default function PivotTable({
   )
 
   const numericFields = useMemo(
-    () =>
-      availableFields.filter((field) =>
-        data.some((row) => typeof row[field] === 'number')
-      ),
+    () => {
+      const fields = availableFields.filter((field) =>
+        !isDateLikeField(field) && data.some((row) => typeof row[field] === 'number')
+      )
+      // Add Count as a virtual field
+      fields.push('Count')
+      return fields
+    },
     [availableFields, data]
   )
 
-  const pivotedData = useMemo(() => {
-    if (!groupByField || !aggregateField) return []
+  const getAggregateValue = (
+    rows: any[],
+    aggregateField: string,
+    aggregationType: 'sum' | 'count' | 'avg'
+  ): number => {
+    if (!aggregateField) return 0
+    if (aggregateField === 'Count' || aggregationType === 'count') {
+      return rows.length
+    }
 
-    const grouped: { [key: string]: any[] } = {}
+    const total = rows.reduce(
+      (sum, row) => sum + (Number(row[aggregateField]) || 0),
+      0
+    )
 
-    // Group data
+    if (aggregationType === 'avg') {
+      return rows.length > 0 ? total / rows.length : 0
+    }
+
+    return total
+  }
+
+  const pivotedData = useMemo<GroupedPivotRow[]>(() => {
+    if (!parentGroupByField) return []
+
+    const groupedParents: { [key: string]: any[] } = {}
+
+    // Group data by parent field
     data.forEach((row) => {
-      const groupKey = String(row[groupByField])
-      if (!grouped[groupKey]) {
-        grouped[groupKey] = []
+      const parentKey = String(row[parentGroupByField] ?? '-')
+      if (!groupedParents[parentKey]) {
+        groupedParents[parentKey] = []
       }
-      grouped[groupKey].push(row)
+      groupedParents[parentKey].push(row)
     })
 
-    // Aggregate
-    return Object.entries(grouped).map(([groupKey, rows]) => {
-      let aggregatedValue: number = 0
+    const buildAggregates = (rows: any[]) => {
+      const values: { [key: string]: string } = {}
+      if (aggregateField1) {
+        const value1 = getAggregateValue(rows, aggregateField1, aggregationType1)
+        values[`${aggregateField1} (${aggregationType1})`] = formatAggregateValue(value1, aggregationType1)
+      }
+      if (aggregateField2) {
+        const value2 = getAggregateValue(rows, aggregateField2, aggregationType2)
+        values[`${aggregateField2} (${aggregationType2})`] = formatAggregateValue(value2, aggregationType2)
+      }
+      return values
+    }
 
-      if (aggregationType === 'sum') {
-        aggregatedValue = rows.reduce(
-          (sum, row) => sum + (Number(row[aggregateField]) || 0),
-          0
-        )
-      } else if (aggregationType === 'count') {
-        aggregatedValue = rows.length
-      } else if (aggregationType === 'avg') {
-        const total = rows.reduce(
-          (sum, row) => sum + (Number(row[aggregateField]) || 0),
-          0
-        )
-        aggregatedValue = rows.length > 0 ? total / rows.length : 0
+    return Object.entries(groupedParents).map(([parentKey, parentRows]) => {
+      const parentRow: GroupedPivotRow = {
+        key: parentKey,
+        label: parentKey,
+        values: buildAggregates(parentRows),
+        children: [],
       }
 
-      return {
-        [groupByField]: groupKey,
-        [aggregateField]: aggregatedValue.toFixed(2),
-        Count: rows.length,
+      if (childGroupByField) {
+        const groupedChildren: { [key: string]: any[] } = {}
+
+        parentRows.forEach((row) => {
+          const childKey = String(row[childGroupByField] ?? '-')
+          if (!groupedChildren[childKey]) {
+            groupedChildren[childKey] = []
+          }
+          groupedChildren[childKey].push(row)
+        })
+
+        parentRow.children = Object.entries(groupedChildren).map(([childKey, childRows]) => ({
+          key: `${parentKey}__${childKey}`,
+          label: childKey,
+          values: buildAggregates(childRows),
+          children: [],
+        }))
       }
+
+      return parentRow
     })
-  }, [data, groupByField, aggregateField, aggregationType])
+  }, [
+    data,
+    parentGroupByField,
+    childGroupByField,
+    aggregateField1,
+    aggregateField2,
+    aggregationType1,
+    aggregationType2,
+  ])
+
+  const handleParentGroupChange = (field: string) => {
+    setParentGroupByField(field)
+    if (field && field === childGroupByField) {
+      setChildGroupByField('')
+    }
+    setCollapsedParents({})
+  }
+
+  const handleChildGroupChange = (field: string) => {
+    setChildGroupByField(field)
+    setCollapsedParents({})
+  }
+
+  const toggleParentRow = (parentKey: string) => {
+    setCollapsedParents((prev) => ({
+      ...prev,
+      [parentKey]: !prev[parentKey],
+    }))
+  }
+
+  const groupableFields = useMemo(
+    () => availableFields,
+    [availableFields]
+  )
 
   if (visibleColumns.length === 0) {
     return (
@@ -85,15 +184,15 @@ export default function PivotTable({
 
       <div className="pivot-controls">
         <div className="pivot-control-group">
-          <label htmlFor="group-by">Group By</label>
+          <label htmlFor="parent-group-by">Parent Group By</label>
           <select
-            id="group-by"
-            value={groupByField}
-            onChange={(e) => setGroupByField(e.target.value)}
+            id="parent-group-by"
+            value={parentGroupByField}
+            onChange={(e) => handleParentGroupChange(e.target.value)}
             className="pivot-select"
           >
             <option value="">Select a field...</option>
-            {availableFields.map((field) => (
+            {groupableFields.map((field) => (
               <option key={field} value={field}>
                 {field}
               </option>
@@ -102,67 +201,146 @@ export default function PivotTable({
         </div>
 
         <div className="pivot-control-group">
-          <label htmlFor="aggregate-field">Aggregate Field</label>
+          <label htmlFor="child-group-by">Child Group By (Optional)</label>
           <select
-            id="aggregate-field"
-            value={aggregateField}
-            onChange={(e) => setAggregateField(e.target.value)}
+            id="child-group-by"
+            value={childGroupByField}
+            onChange={(e) => handleChildGroupChange(e.target.value)}
             className="pivot-select"
+            disabled={!parentGroupByField}
           >
-            <option value="">Select a field...</option>
-            {numericFields.map((field) => (
-              <option key={field} value={field}>
-                {field}
-              </option>
-            ))}
+            <option value="">None</option>
+            {groupableFields
+              .filter((field) => field !== parentGroupByField)
+              .map((field) => (
+                <option key={field} value={field}>
+                  {field}
+                </option>
+              ))}
           </select>
         </div>
 
-        <div className="pivot-control-group">
-          <label htmlFor="agg-type">Aggregation</label>
-          <select
-            id="agg-type"
-            value={aggregationType}
-            onChange={(e) =>
-              setAggregationType(e.target.value as 'sum' | 'count' | 'avg')
-            }
-            className="pivot-select"
-          >
-            <option value="sum">Sum</option>
-            <option value="count">Count</option>
-            <option value="avg">Average</option>
-          </select>
+        <div className="pivot-control-row">
+          <div className="pivot-control-group">
+            <label htmlFor="aggregate-field-1">Aggregate Field 1</label>
+            <select
+              id="aggregate-field-1"
+              value={aggregateField1}
+              onChange={(e) => setAggregateField1(e.target.value)}
+              className="pivot-select"
+            >
+              <option value="">Select a field...</option>
+              {numericFields.map((field) => (
+                <option key={field} value={field}>
+                  {field}
+                </option>
+              ))}
+            </select>
+            <select
+              value={aggregationType1}
+              onChange={(e) =>
+                setAggregationType1(e.target.value as 'sum' | 'count' | 'avg')
+              }
+              className="pivot-select"
+            >
+              <option value="sum">Sum</option>
+              <option value="count">Count</option>
+              <option value="avg">Average</option>
+            </select>
+          </div>
+
+          <div className="pivot-control-group">
+            <label htmlFor="aggregate-field-2">Aggregate Field 2</label>
+            <select
+              id="aggregate-field-2"
+              value={aggregateField2}
+              onChange={(e) => setAggregateField2(e.target.value)}
+              className="pivot-select"
+            >
+              <option value="">Select a field...</option>
+              {numericFields.map((field) => (
+                <option key={field} value={field}>
+                  {field}
+                </option>
+              ))}
+            </select>
+            <select
+              value={aggregationType2}
+              onChange={(e) =>
+                setAggregationType2(e.target.value as 'sum' | 'count' | 'avg')
+              }
+              className="pivot-select"
+            >
+              <option value="sum">Sum</option>
+              <option value="count">Count</option>
+              <option value="avg">Average</option>
+            </select>
+          </div>
         </div>
       </div>
 
-      {groupByField && aggregateField ? (
+      {parentGroupByField && (aggregateField1 || aggregateField2) ? (
         <div className="table-wrapper">
           <table className="pivot-table">
             <thead>
               <tr>
-                <th>{groupByField}</th>
-                <th>
-                  {aggregationType.charAt(0).toUpperCase() +
-                    aggregationType.slice(1)}{' '}
-                  {aggregateField}
-                </th>
-                <th>Count</th>
+                <th>{parentGroupByField}</th>
+                {childGroupByField && <th>{childGroupByField}</th>}
+                {aggregateField1 && <th>{aggregateField1} ({aggregationType1})</th>}
+                {aggregateField2 && <th>{aggregateField2} ({aggregationType2})</th>}
               </tr>
             </thead>
             <tbody>
-              {pivotedData.map((row, idx) => (
-                <tr key={idx}>
-                  <td>{row[groupByField]}</td>
-                  <td className="number">{row[aggregateField]}</td>
-                  <td className="number">{row.Count}</td>
-                </tr>
-              ))}
+              {pivotedData.map((parentRow) => {
+                const parentIsCollapsed = !!collapsedParents[parentRow.key]
+                return (
+                  <>
+                    <tr key={parentRow.key} className="pivot-parent-row">
+                      <td>
+                        {childGroupByField && parentRow.children.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => toggleParentRow(parentRow.key)}
+                            className="pivot-collapse-btn"
+                            aria-label={parentIsCollapsed ? 'Expand group' : 'Collapse group'}
+                          >
+                            {parentIsCollapsed ? '▶' : '▼'}
+                          </button>
+                        )}
+                        <span>{parentRow.label}</span>
+                      </td>
+                      {childGroupByField && <td className="pivot-empty-cell">-</td>}
+                      {aggregateField1 && (
+                        <td className="number">{parentRow.values[`${aggregateField1} (${aggregationType1})`]}</td>
+                      )}
+                      {aggregateField2 && (
+                        <td className="number">{parentRow.values[`${aggregateField2} (${aggregationType2})`]}</td>
+                      )}
+                    </tr>
+
+                    {childGroupByField &&
+                      !parentIsCollapsed &&
+                      parentRow.children.map((childRow) => (
+                        <tr key={childRow.key} className="pivot-child-row">
+                          <td className="pivot-empty-cell">-</td>
+                          <td className="pivot-child-cell">{childRow.label}</td>
+                          {aggregateField1 && (
+                            <td className="number">{childRow.values[`${aggregateField1} (${aggregationType1})`]}</td>
+                          )}
+                          {aggregateField2 && (
+                            <td className="number">{childRow.values[`${aggregateField2} (${aggregationType2})`]}</td>
+                          )}
+                        </tr>
+                      ))}
+                  </>
+                )
+              })}
             </tbody>
           </table>
         </div>
       ) : (
         <p className="no-columns-message">
-          Please select a field to group by and a field to aggregate
+          Please select a parent group field and at least one field to aggregate
         </p>
       )}
     </div>

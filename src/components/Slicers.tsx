@@ -7,7 +7,6 @@ interface SlicersProps {
 
 export interface FilterConfig {
   dropdowns: { [key: string]: string }
-  multiSelect: { [key: string]: string[] }
   dateRange: { column: string; start: string; end: string } | null
 }
 
@@ -19,18 +18,28 @@ interface ColumnInfo {
   maxValue?: number
 }
 
+interface DateRangeState {
+  column: string
+  start: string
+  end: string
+}
+
 export default function Slicers({ data, onFilter }: SlicersProps) {
   const [dropdownFilters, setDropdownFilters] = useState<{
     [key: string]: string
   }>({})
-  const [multiSelectFilters, setMultiSelectFilters] = useState<{
-    [key: string]: string[]
-  }>({})
-  const [dateRange, setDateRange] = useState<{
-    column: string
-    start: string
-    end: string
-  } | null>(null)
+  const [dateRange, setDateRange] = useState<DateRangeState>({
+    column: '',
+    start: '',
+    end: '',
+  })
+
+  const getAppliedDateRange = (range: DateRangeState): FilterConfig['dateRange'] => {
+    if (!range.column || !range.start || !range.end) {
+      return null
+    }
+    return range
+  }
 
   const columnsInfo = useMemo(() => {
     if (!data || data.length === 0) return []
@@ -86,28 +95,7 @@ export default function Slicers({ data, onFilter }: SlicersProps) {
       newFilters[column] = value
     }
     setDropdownFilters(newFilters)
-    applyFilters(newFilters, multiSelectFilters, dateRange)
-  }
-
-  const handleMultiSelectChange = (column: string, value: string) => {
-    const newFilters = { ...multiSelectFilters }
-    if (!newFilters[column]) {
-      newFilters[column] = []
-    }
-
-    const idx = newFilters[column].indexOf(value)
-    if (idx > -1) {
-      newFilters[column].splice(idx, 1)
-    } else {
-      newFilters[column].push(value)
-    }
-
-    if (newFilters[column].length === 0) {
-      delete newFilters[column]
-    }
-
-    setMultiSelectFilters(newFilters)
-    applyFilters(dropdownFilters, newFilters, dateRange)
+    applyFilters(newFilters, getAppliedDateRange(dateRange))
   }
 
   const handleDateRangeChange = (
@@ -115,19 +103,17 @@ export default function Slicers({ data, onFilter }: SlicersProps) {
     start: string,
     end: string
   ) => {
-    const newDateRange = start && end ? { column, start, end } : null
+    const newDateRange: DateRangeState = { column, start, end }
     setDateRange(newDateRange)
-    applyFilters(dropdownFilters, multiSelectFilters, newDateRange)
+    applyFilters(dropdownFilters, getAppliedDateRange(newDateRange))
   }
 
   const applyFilters = (
     dropdowns: { [key: string]: string },
-    multiSelect: { [key: string]: string[] },
     dateRangeVal: { column: string; start: string; end: string } | null
   ) => {
     onFilter({
       dropdowns,
-      multiSelect,
       dateRange: dateRangeVal,
     })
   }
@@ -168,40 +154,6 @@ export default function Slicers({ data, onFilter }: SlicersProps) {
         </div>
       )}
 
-      {stringColumns.length > 0 && (
-        <div className="slicer-section">
-          <h3>Multi-Select Filters</h3>
-          <div className="multiselect-grid">
-            {stringColumns.slice(0, 2).map((col) => (
-              <div key={col.name} className="multiselect-item">
-                <label>{col.name}</label>
-                <div className="checkbox-list">
-                  {col.uniqueValues?.slice(0, 5).map((val) => (
-                    <label key={val} className="checkbox-label">
-                      <input
-                        type="checkbox"
-                        checked={
-                          multiSelectFilters[col.name]?.includes(val) || false
-                        }
-                        onChange={() =>
-                          handleMultiSelectChange(col.name, val)
-                        }
-                      />
-                      {val}
-                    </label>
-                  ))}
-                  {(col.uniqueValues?.length || 0) > 5 && (
-                    <p className="text-muted">
-                      +{(col.uniqueValues?.length || 0) - 5} more
-                    </p>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
       {dateColumns.length > 0 && (
         <div className="slicer-section">
           <h3>Date Range</h3>
@@ -210,12 +162,12 @@ export default function Slicers({ data, onFilter }: SlicersProps) {
             <div className="date-inputs">
               <input
                 type="date"
-                value={dateRange?.start || ''}
+                value={dateRange.start}
                 onChange={(e) =>
                   handleDateRangeChange(
                     dateColumns[0].name,
                     e.target.value,
-                    dateRange?.end || ''
+                    dateRange.end
                   )
                 }
                 placeholder="From"
@@ -223,11 +175,11 @@ export default function Slicers({ data, onFilter }: SlicersProps) {
               <span>to</span>
               <input
                 type="date"
-                value={dateRange?.end || ''}
+                value={dateRange.end}
                 onChange={(e) =>
                   handleDateRangeChange(
                     dateColumns[0].name,
-                    dateRange?.start || '',
+                    dateRange.start,
                     e.target.value
                   )
                 }
