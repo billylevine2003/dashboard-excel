@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 
 interface KeyMetricsProps {
   data: any[]
@@ -71,17 +71,50 @@ export default function KeyMetrics({ data }: KeyMetricsProps) {
     return null
   }
 
-  const columns = Object.keys(data[0])
-  const claimNumberColumn = findColumn(columns, ['Claim Number'])
-  const directLossPaidColumn = findColumn(columns, [
+  const columns = useMemo(() => (data.length > 0 ? Object.keys(data[0]) : []), [data])
+
+  const defaultClaimNumberColumn = findColumn(columns, ['Claim Number']) ?? ''
+  const defaultDirectLossPaidColumn = findColumn(columns, [
     'Direct Loss Paid ITD',
     'Direct Loss Paid',
-  ])
-  const reserveOutstandingColumn = findColumn(columns, [
+  ]) ?? ''
+  const defaultReserveOutstandingColumn = findColumn(columns, [
     'Direct Loss Reserve Outstanding',
     'Reserve Outstanding',
+  ]) ?? ''
+  const defaultStatusColumn = findColumn(columns, ['Claim Status', 'Status']) ?? ''
+
+  const [claimNumberColumn, setClaimNumberColumn] = useState<string>(defaultClaimNumberColumn)
+  const [directLossPaidColumn, setDirectLossPaidColumn] = useState<string>(defaultDirectLossPaidColumn)
+  const [reserveOutstandingColumn, setReserveOutstandingColumn] = useState<string>(
+    defaultReserveOutstandingColumn
+  )
+  const [statusColumn, setStatusColumn] = useState<string>(defaultStatusColumn)
+
+  useEffect(() => {
+    if (!claimNumberColumn || !columns.includes(claimNumberColumn)) {
+      setClaimNumberColumn(defaultClaimNumberColumn)
+    }
+    if (!directLossPaidColumn || !columns.includes(directLossPaidColumn)) {
+      setDirectLossPaidColumn(defaultDirectLossPaidColumn)
+    }
+    if (!reserveOutstandingColumn || !columns.includes(reserveOutstandingColumn)) {
+      setReserveOutstandingColumn(defaultReserveOutstandingColumn)
+    }
+    if (!statusColumn || !columns.includes(statusColumn)) {
+      setStatusColumn(defaultStatusColumn)
+    }
+  }, [
+    columns,
+    claimNumberColumn,
+    directLossPaidColumn,
+    reserveOutstandingColumn,
+    statusColumn,
+    defaultClaimNumberColumn,
+    defaultDirectLossPaidColumn,
+    defaultReserveOutstandingColumn,
+    defaultStatusColumn,
   ])
-  const statusColumn = findColumn(columns, ['Claim Status', 'Status'])
 
   const claimCount = claimNumberColumn
     ? new Set(
@@ -263,47 +296,125 @@ export default function KeyMetrics({ data }: KeyMetricsProps) {
         </button>
       </div>
 
-      {!collapsed && <div className="kpi-grid">
-        <article className="kpi-card">
-          <p className="kpi-label">Claim Count</p>
-          <p className="kpi-value">{formatInteger(claimCount)}</p>
-        </article>
+      <div className="kpi-field-controls">
+        <div className="kpi-field-group">
+          <label htmlFor="kpi-claim-id-column">Claim Identifier Field</label>
+          <select
+            id="kpi-claim-id-column"
+            value={claimNumberColumn}
+            onChange={(e) => setClaimNumberColumn(e.target.value)}
+            className="kpi-field-select"
+          >
+            <option value="">No claim ID (count rows)</option>
+            {columns.map((column) => (
+              <option key={column} value={column}>
+                {column}
+              </option>
+            ))}
+          </select>
+        </div>
 
-        <article className="kpi-card">
-          <p className="kpi-label">Claims Open Without Pay</p>
-          <p className="kpi-value">{formatInteger(openUnpaidClaimCount)}</p>
-        </article>
+        <div className="kpi-field-group">
+          <label htmlFor="kpi-status-column">Status Field</label>
+          <select
+            id="kpi-status-column"
+            value={statusColumn}
+            onChange={(e) => setStatusColumn(e.target.value)}
+            className="kpi-field-select"
+          >
+            <option value="">No status field</option>
+            {columns.map((column) => (
+              <option key={column} value={column}>
+                {column}
+              </option>
+            ))}
+          </select>
+        </div>
 
-        <article className="kpi-card">
-          <p className="kpi-label">Claims Closed Without Pay</p>
-          <p className="kpi-value">{formatInteger(closedUnpaidClaimCount)}</p>
-        </article>
+        <div className="kpi-field-group">
+          <label htmlFor="kpi-paid-column">Paid ITD Field</label>
+          <select
+            id="kpi-paid-column"
+            value={directLossPaidColumn}
+            onChange={(e) => setDirectLossPaidColumn(e.target.value)}
+            className="kpi-field-select"
+          >
+            <option value="">No paid field</option>
+            {columns.map((column) => (
+              <option key={column} value={column}>
+                {column}
+              </option>
+            ))}
+          </select>
+        </div>
 
-        <article className="kpi-card">
-          <p className="kpi-label">Claims Open With Pay</p>
-          <p className="kpi-value">{formatInteger(openWithPayClaimCount)}</p>
-        </article>
+        <div className="kpi-field-group">
+          <label htmlFor="kpi-reserve-column">Reserve Outstanding Field</label>
+          <select
+            id="kpi-reserve-column"
+            value={reserveOutstandingColumn}
+            onChange={(e) => setReserveOutstandingColumn(e.target.value)}
+            className="kpi-field-select"
+          >
+            <option value="">No reserve field</option>
+            {columns.map((column) => (
+              <option key={column} value={column}>
+                {column}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
 
-        <article className="kpi-card">
-          <p className="kpi-label">Open With Pay - Paid ITD</p>
-          <p className="kpi-value">{formatCurrency(openWithPayFinancials.paidItdTotal)}</p>
-        </article>
+      {!collapsed && (
+        <>
+          <h3 className="kpi-row-title">Financial Metrics</h3>
+          <div className="kpi-grid kpi-grid-money">
+            <article className="kpi-card kpi-card-open-with-pay-paid">
+              <p className="kpi-label">Open With Pay - Paid ITD</p>
+              <p className="kpi-value">{formatCurrency(openWithPayFinancials.paidItdTotal)}</p>
+            </article>
 
-        <article className="kpi-card">
-          <p className="kpi-label">Open With Pay - Direct Loss Reserve Outstanding</p>
-          <p className="kpi-value">{formatCurrency(openWithPayFinancials.reserveOutstandingTotal)}</p>
-        </article>
+            <article className="kpi-card kpi-card-open-with-pay-reserve">
+              <p className="kpi-label">Open With Pay - Direct Loss Reserve Outstanding</p>
+              <p className="kpi-value">{formatCurrency(openWithPayFinancials.reserveOutstandingTotal)}</p>
+            </article>
 
-        <article className="kpi-card">
-          <p className="kpi-label">Total Direct Loss Paid ITD</p>
-          <p className="kpi-value">{formatCurrency(totalDirectLossPaid)}</p>
-        </article>
+            <article className="kpi-card kpi-card-total-paid">
+              <p className="kpi-label">Total Direct Loss Paid ITD</p>
+              <p className="kpi-value">{formatCurrency(totalDirectLossPaid)}</p>
+            </article>
 
-        <article className="kpi-card">
-          <p className="kpi-label">Direct Loss Reserve Outstanding</p>
-          <p className="kpi-value">{formatCurrency(totalDirectLossReserveOutstanding)}</p>
-        </article>
-      </div>}
+            <article className="kpi-card kpi-card-total-reserve">
+              <p className="kpi-label">Direct Loss Reserve Outstanding</p>
+              <p className="kpi-value">{formatCurrency(totalDirectLossReserveOutstanding)}</p>
+            </article>
+          </div>
+
+          <h3 className="kpi-row-title">Claim Counts</h3>
+          <div className="kpi-grid kpi-grid-counts">
+            <article className="kpi-card kpi-card-claim-count">
+              <p className="kpi-label">Claim Count</p>
+              <p className="kpi-value">{formatInteger(claimCount)}</p>
+            </article>
+
+            <article className="kpi-card kpi-card-open-without-pay">
+              <p className="kpi-label">Claims Open Without Pay</p>
+              <p className="kpi-value">{formatInteger(openUnpaidClaimCount)}</p>
+            </article>
+
+            <article className="kpi-card kpi-card-closed-without-pay">
+              <p className="kpi-label">Claims Closed Without Pay</p>
+              <p className="kpi-value">{formatInteger(closedUnpaidClaimCount)}</p>
+            </article>
+
+            <article className="kpi-card kpi-card-open-with-pay-count">
+              <p className="kpi-label">Claims Open With Pay</p>
+              <p className="kpi-value">{formatInteger(openWithPayClaimCount)}</p>
+            </article>
+          </div>
+        </>
+      )}
     </section>
   )
 }

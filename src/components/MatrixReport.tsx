@@ -307,11 +307,11 @@ export default function MatrixReport({ data }: MatrixReportProps) {
             <thead>
               <tr>
                 <th>{adjusterColumn}</th>
-                <th>Claims Open Without Pay</th>
-                <th>Claims Closed Without Pay</th>
-                <th>Claims Open With Pay</th>
-                <th>Open With Pay - Paid ITD</th>
-                <th>Open With Pay - Direct Loss Reserve Outstanding</th>
+                <th className="matrix-col-open-without-pay">Claims Open Without Pay</th>
+                <th className="matrix-col-closed-without-pay">Claims Closed Without Pay</th>
+                <th className="matrix-col-open-with-pay">Claims Open With Pay</th>
+                <th className="matrix-col-open-with-pay-paid">Open With Pay - Paid ITD</th>
+                <th className="matrix-col-open-with-pay-reserve">Open With Pay - Direct Loss Reserve Outstanding</th>
               </tr>
             </thead>
             <tbody>

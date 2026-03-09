@@ -267,7 +267,7 @@ function App() {
   return (
     <div className="app">
       <header className="header">
-        <h1>📊 Excel Dashboard</h1>
+        <h1>📊 Claims 101</h1>
         <p>Upload, analyze, and visualize your Excel data</p>
       </header>
 
@@ -368,6 +368,7 @@ function App() {
                     <div className="chart-section">
                       <Charts
                         data={filteredData || currentData}
+                        xAxisKey="Claim Reported Month-Year"
                         numericKeys={['Direct Loss Paid ITD', 'Direct Loss Reserve Outstanding']}
                       />
                     </div>
