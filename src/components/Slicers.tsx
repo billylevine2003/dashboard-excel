@@ -25,6 +25,7 @@ interface DateRangeState {
 }
 
 export default function Slicers({ data, onFilter }: SlicersProps) {
+  const [isCollapsed, setIsCollapsed] = useState(false)
   const [dropdownFilters, setDropdownFilters] = useState<{
     [key: string]: string
   }>({})
@@ -125,69 +126,84 @@ export default function Slicers({ data, onFilter }: SlicersProps) {
 
   return (
     <div className="slicers-container">
-      <h2>🎚️ Slicers & Filters</h2>
+      <div className="collapsible-section-header">
+        <h2>🎚️ Slicers & Filters</h2>
+        <button
+          type="button"
+          className="collapse-btn"
+          onClick={() => setIsCollapsed((prev) => !prev)}
+          aria-expanded={!isCollapsed}
+          title={isCollapsed ? 'Expand' : 'Collapse'}
+        >
+          {isCollapsed ? '▶' : '▼'}
+        </button>
+      </div>
 
-      {stringColumns.length > 0 && (
-        <div className="slicer-section">
-          <h3>Category Filters</h3>
-          <div className="slicer-grid">
-            {stringColumns.map((col) => (
-              <div key={col.name} className="slicer-item">
-                <label>{col.name}</label>
-                <select
-                  value={dropdownFilters[col.name] || ''}
-                  onChange={(e) =>
-                    handleDropdownChange(col.name, e.target.value)
-                  }
-                  className="slicer-select"
-                >
-                  <option value="">All</option>
-                  {col.uniqueValues?.map((val) => (
-                    <option key={val} value={val}>
-                      {val}
-                    </option>
-                  ))}
-                </select>
+      {!isCollapsed && (
+        <>
+          {stringColumns.length > 0 && (
+            <div className="slicer-section">
+              <h3>Category Filters</h3>
+              <div className="slicer-grid">
+                {stringColumns.map((col) => (
+                  <div key={col.name} className="slicer-item">
+                    <label>{col.name}</label>
+                    <select
+                      value={dropdownFilters[col.name] || ''}
+                      onChange={(e) =>
+                        handleDropdownChange(col.name, e.target.value)
+                      }
+                      className="slicer-select"
+                    >
+                      <option value="">All</option>
+                      {col.uniqueValues?.map((val) => (
+                        <option key={val} value={val}>
+                          {val}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {dateColumns.length > 0 && (
-        <div className="slicer-section">
-          <h3>Date Range</h3>
-          <div className="date-range-item">
-            <label>{dateColumns[0].name}</label>
-            <div className="date-inputs">
-              <input
-                type="date"
-                value={dateRange.start}
-                onChange={(e) =>
-                  handleDateRangeChange(
-                    dateColumns[0].name,
-                    e.target.value,
-                    dateRange.end
-                  )
-                }
-                placeholder="From"
-              />
-              <span>to</span>
-              <input
-                type="date"
-                value={dateRange.end}
-                onChange={(e) =>
-                  handleDateRangeChange(
-                    dateColumns[0].name,
-                    dateRange.start,
-                    e.target.value
-                  )
-                }
-                placeholder="To"
-              />
             </div>
-          </div>
-        </div>
+          )}
+
+          {dateColumns.length > 0 && (
+            <div className="slicer-section">
+              <h3>Date Range</h3>
+              <div className="date-range-item">
+                <label>{dateColumns[0].name}</label>
+                <div className="date-inputs">
+                  <input
+                    type="date"
+                    value={dateRange.start}
+                    onChange={(e) =>
+                      handleDateRangeChange(
+                        dateColumns[0].name,
+                        e.target.value,
+                        dateRange.end
+                      )
+                    }
+                    placeholder="From"
+                  />
+                  <span>to</span>
+                  <input
+                    type="date"
+                    value={dateRange.end}
+                    onChange={(e) =>
+                      handleDateRangeChange(
+                        dateColumns[0].name,
+                        dateRange.start,
+                        e.target.value
+                      )
+                    }
+                    placeholder="To"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+        </>
       )}
     </div>
   )

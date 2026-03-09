@@ -9,6 +9,7 @@ interface LeftPanelProps {
 const FILTER_FIELDS = [
   { name: 'Adjuster Code', sourceColumn: 'Claim Component Adjuster Code' },
   { name: 'Peril Description', sourceColumn: 'Peril Description' },
+  { name: 'Age Category', sourceColumn: 'Claim Age Category' },
 ]
 
 export default function LeftPanel({

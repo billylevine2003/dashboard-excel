@@ -2,6 +2,7 @@ import { useState } from 'react'
 import * as XLSX from 'xlsx'
 import DataTable from './components/DataTable'
 import PivotTable from './components/PivotTable'
+import MatrixReport from './components/MatrixReport'
 import Charts from './components/Charts'
 import FileUpload from './components/FileUpload'
 import FilterSearch from './components/FilterSearch'
@@ -50,6 +51,69 @@ const extractMonthYear = (value: unknown): string | null => {
   return null
 }
 
+const parseDateValue = (value: unknown): Date | null => {
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return value
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    if (!trimmed) {
+      return null
+    }
+
+    const isoMatch = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+    if (isoMatch) {
+      const year = Number(isoMatch[1])
+      const month = Number(isoMatch[2]) - 1
+      const day = Number(isoMatch[3])
+      return new Date(year, month, day)
+    }
+
+    const parsedTime = Date.parse(trimmed)
+    if (!Number.isNaN(parsedTime)) {
+      return new Date(parsedTime)
+    }
+  }
+
+  return null
+}
+
+const getClaimAgeDays = (reportedDateValue: unknown): number | null => {
+  const reportedDate = parseDateValue(reportedDateValue)
+  if (!reportedDate) {
+    return null
+  }
+
+  const today = new Date()
+  const reportedUtc = Date.UTC(
+    reportedDate.getFullYear(),
+    reportedDate.getMonth(),
+    reportedDate.getDate()
+  )
+  const todayUtc = Date.UTC(today.getFullYear(), today.getMonth(), today.getDate())
+
+  const diffMs = todayUtc - reportedUtc
+  if (diffMs < 0) {
+    return 0
+  }
+
+  return Math.floor(diffMs / (1000 * 60 * 60 * 24))
+}
+
+const getClaimAgeCategory = (ageDays: number | null): string => {
+  if (ageDays === null) {
+    return ''
+  }
+  if (ageDays <= 30) {
+    return '0 to 30'
+  }
+  if (ageDays <= 60) {
+    return '31 to 60'
+  }
+  return '>60'
+}
+
 const normalizeDateFieldsInRow = (row: Record<string, unknown>): Record<string, unknown> => {
   const normalized: Record<string, unknown> = { ...row }
 
@@ -68,6 +132,10 @@ const normalizeDateFieldsInRow = (row: Record<string, unknown>): Record<string, 
     if (monthYear) {
       normalized['Claim Reported Month-Year'] = monthYear
     }
+
+    const claimAgeDays = getClaimAgeDays(normalized[claimReportedDateKey])
+    normalized['Claim Age (Days)'] = claimAgeDays ?? ''
+    normalized['Claim Age Category'] = getClaimAgeCategory(claimAgeDays)
   }
 
   return normalized
@@ -78,7 +146,7 @@ function App() {
   const [sheetNames, setSheetNames] = useState<string[]>([])
   const [activeSheet, setActiveSheet] = useState<string>('')
   const [filteredData, setFilteredData] = useState<any[] | null>(null)
-  const [viewMode, setViewMode] = useState<'charts' | 'table' | 'pivot'>('charts')
+  const [viewMode, setViewMode] = useState<'charts' | 'table' | 'pivot' | 'matrix'>('charts')
   const [searchTerm, setSearchTerm] = useState<string>('')
   const [searchColumn, setSearchColumn] = useState<string>('')
   const [slicerConfig, setSlicerConfig] = useState<any>(null)
@@ -288,6 +356,12 @@ function App() {
                     >
                       🔀 Pivot Table
                     </button>
+                    <button
+                      className={`toggle-btn ${viewMode === 'matrix' ? 'active' : ''}`}
+                      onClick={() => setViewMode('matrix')}
+                    >
+                      🧮 Matrix Report
+                    </button>
                   </div>
 
                   {viewMode === 'charts' && (
@@ -314,6 +388,12 @@ function App() {
                         data={filteredData || currentData}
                         visibleColumns={visibleColumns}
                       />
+                    </div>
+                  )}
+
+                  {viewMode === 'matrix' && (
+                    <div className="table-section">
+                      <MatrixReport data={filteredData || currentData} />
                     </div>
                   )}
                 </>

@@ -40,6 +40,20 @@ const parseNumber = (value: unknown): number => {
   return 0
 }
 
+const getStatusBucket = (value: unknown): 'open' | 'closed' | 'other' => {
+  const normalized = String(value ?? '').trim().toLowerCase()
+
+  if (/\bclosed\b/.test(normalized)) {
+    return 'closed'
+  }
+
+  if (/\bopen\b/.test(normalized) || /\breopen\b/.test(normalized) || /\breopened\b/.test(normalized)) {
+    return 'open'
+  }
+
+  return 'other'
+}
+
 const formatInteger = (value: number): string =>
   new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(value)
 
@@ -67,6 +81,7 @@ export default function KeyMetrics({ data }: KeyMetricsProps) {
     'Direct Loss Reserve Outstanding',
     'Reserve Outstanding',
   ])
+  const statusColumn = findColumn(columns, ['Claim Status', 'Status'])
 
   const claimCount = claimNumberColumn
     ? new Set(
@@ -83,6 +98,44 @@ export default function KeyMetrics({ data }: KeyMetricsProps) {
   const totalDirectLossReserveOutstanding = reserveOutstandingColumn
     ? data.reduce((sum, row) => sum + parseNumber(row[reserveOutstandingColumn]), 0)
     : 0
+
+  const openUnpaidClaimCount = (() => {
+    if (!statusColumn) {
+      return 0
+    }
+
+    const paidColumnForUnpaidCheck = directLossPaidColumn
+    const openUnpaidClaimIds = new Set<string>()
+    let openUnpaidRowCount = 0
+
+    data.forEach((row) => {
+      const statusBucket = getStatusBucket(row[statusColumn])
+      if (statusBucket !== 'open') {
+        return
+      }
+
+      const paidAmount = paidColumnForUnpaidCheck ? parseNumber(row[paidColumnForUnpaidCheck]) : 0
+      if (paidAmount > 0) {
+        return
+      }
+
+      if (claimNumberColumn) {
+        const claimId = String(row[claimNumberColumn] ?? '').trim()
+        if (claimId) {
+          openUnpaidClaimIds.add(claimId)
+          return
+        }
+      }
+
+      openUnpaidRowCount += 1
+    })
+
+    if (claimNumberColumn) {
+      return openUnpaidClaimIds.size
+    }
+
+    return openUnpaidRowCount
+  })()
 
   return (
     <section className="kpi-section">
@@ -101,6 +154,11 @@ export default function KeyMetrics({ data }: KeyMetricsProps) {
         <article className="kpi-card">
           <p className="kpi-label">Claim Count</p>
           <p className="kpi-value">{formatInteger(claimCount)}</p>
+        </article>
+
+        <article className="kpi-card">
+          <p className="kpi-label">Open Unpaid</p>
+          <p className="kpi-value">{formatInteger(openUnpaidClaimCount)}</p>
         </article>
 
         <article className="kpi-card">
