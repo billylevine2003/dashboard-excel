@@ -54,7 +54,7 @@ export default function FilterSearch({
   return (
     <div className="filter-section">
       <div className="collapsible-section-header">
-        <h2>🔎 Filter & Search</h2>
+        <h2>🔎 Search</h2>
         <button
           type="button"
           className="collapse-btn"

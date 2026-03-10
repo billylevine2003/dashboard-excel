@@ -830,6 +830,18 @@
   border-bottom: 2px solid #667eea;
 }
 
+.left-panel .collapsible-section-header {
+  margin-bottom: 14px;
+  padding-bottom: 10px;
+  border-bottom: 2px solid #667eea;
+}
+
+.left-panel .collapsible-section-header h2 {
+  margin: 0;
+  font-size: 1.2rem;
+  color: #333;
+}
+
 .filter-group-panel {
   margin-bottom: 20px;
 }

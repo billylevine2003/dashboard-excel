@@ -69,6 +69,20 @@ const findMatchingColumn = (columns: string[], candidate: string): string | null
   return partial || null
 }
 
+const isExcludedVisualizationMetric = (columnName: string): boolean => {
+  const normalized = normalize(columnName)
+  const exactExcluded = new Set([
+    'claimant number',
+    'claimant link',
+    'at fault indicator',
+    'loss paid',
+    'loss initial reserve',
+    'loss reserve change',
+  ])
+
+  return exactExcluded.has(normalized)
+}
+
 export default function Charts({ data, xAxisKey, numericKeys }: ChartsProps) {
   const [selectedNumericKeys, setSelectedNumericKeys] = useState<string[]>([])
   const [selectedGroupBy, setSelectedGroupBy] = useState<string>('')
@@ -93,6 +107,7 @@ export default function Charts({ data, xAxisKey, numericKeys }: ChartsProps) {
       const normalized = col.trim().toLowerCase()
       return (
         normalized !== 'claim number' &&
+        !isExcludedVisualizationMetric(col) &&
         !isDateColumn(col) &&
         data.some((row) => typeof row[col] === 'number')
       )

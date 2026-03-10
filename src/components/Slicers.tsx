@@ -120,9 +120,14 @@ export default function Slicers({ data, onFilter }: SlicersProps) {
   }
 
   const stringColumns = columnsInfo.filter(
-    (c) => c.type === 'string' && c.name.toLowerCase() !== 'claim number'
+    (c) =>
+      c.type === 'string' &&
+      c.name.toLowerCase() !== 'claim number' &&
+      c.name.toLowerCase() !== 'claim reported month-year'
   )
-  const dateColumns = columnsInfo.filter((c) => c.type === 'date')
+  const dateColumns = columnsInfo.filter(
+    (c) => c.type === 'date' && c.name.toLowerCase() !== 'claim reported date'
+  )
 
   return (
     <div className="slicers-container">

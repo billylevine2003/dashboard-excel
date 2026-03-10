@@ -2,14 +2,33 @@ import { useMemo, useState } from 'react'
 
 interface LeftPanelProps {
   data: any[]
-  filters: { [key: string]: string[] }
-  onFilterChange: (filters: { [key: string]: string[] }) => void
+  filters: {
+    selectedValues: { [key: string]: string[] }
+    claimReportedDateRange: { start: string; end: string }
+  }
+  onFilterChange: (filters: {
+    selectedValues: { [key: string]: string[] }
+    claimReportedDateRange: { start: string; end: string }
+  }) => void
 }
 
 const FILTER_FIELDS = [
-  { name: 'Adjuster Code', sourceColumn: 'Claim Component Adjuster Code' },
-  { name: 'Peril Description', sourceColumn: 'Peril Description' },
-  { name: 'Age Category', sourceColumn: 'Claim Age Category' },
+  {
+    name: 'Adjuster Code',
+    sourceColumns: ['Claim Component Adjuster Code'],
+  },
+  { name: 'Peril Description', sourceColumns: ['Peril Description'] },
+  { name: 'Loss Cause', sourceColumns: ['Cause of Loss'] },
+  {
+    name: 'Sub Loss Cause',
+    sourceColumns: ['Cause of Loss Subcode', 'Cause of Loss Sub Code', 'Cause of Loss Sub Codes'],
+  },
+  {
+    name: 'Claim Component Status Code',
+    sourceColumns: ['Claim Component Status Code'],
+  },
+  { name: 'Age Category', sourceColumns: ['Claim Age Category'] },
+  { name: 'Claim Reported Month-Year', sourceColumns: ['Claim Reported Month-Year'] },
 ]
 
 export default function LeftPanel({
@@ -17,7 +36,26 @@ export default function LeftPanel({
   filters,
   onFilterChange,
 }: LeftPanelProps) {
+  const [isCollapsed, setIsCollapsed] = useState(false)
   const [collapsedSections, setCollapsedSections] = useState<{ [key: string]: boolean }>({})
+
+  const resolveColumnName = (candidateColumns: string[]): string => {
+    const availableColumns = data.length > 0 ? Object.keys(data[0]) : []
+    const normalizedMap = new Map<string, string>()
+
+    availableColumns.forEach((column) => {
+      normalizedMap.set(column.trim().toLowerCase(), column)
+    })
+
+    for (const candidate of candidateColumns) {
+      const resolved = normalizedMap.get(candidate.trim().toLowerCase())
+      if (resolved) {
+        return resolved
+      }
+    }
+
+    return candidateColumns[0]
+  }
 
   const toggleSection = (fieldName: string) => {
     setCollapsedSections((prev) => ({
@@ -29,7 +67,8 @@ export default function LeftPanel({
   const fieldValues = useMemo(() => {
     const values: { [key: string]: string[] } = {}
 
-    FILTER_FIELDS.forEach(({ name, sourceColumn }) => {
+    FILTER_FIELDS.forEach(({ name, sourceColumns }) => {
+      const sourceColumn = resolveColumnName(sourceColumns)
       const uniqueValues = Array.from(
         new Set(
           data
@@ -47,8 +86,8 @@ export default function LeftPanel({
   }, [data])
 
   const handleToggle = (sourceColumn: string, value: string) => {
-    const currentFilters = filters[sourceColumn] || []
-    const newFilters = { ...filters }
+    const currentFilters = filters.selectedValues[sourceColumn] || []
+    const newFilters = { ...filters.selectedValues }
 
     if (currentFilters.includes(value)) {
       newFilters[sourceColumn] = currentFilters.filter((v) => v !== value)
@@ -56,20 +95,47 @@ export default function LeftPanel({
       newFilters[sourceColumn] = [...currentFilters, value]
     }
 
-    onFilterChange(newFilters)
+    onFilterChange({
+      ...filters,
+      selectedValues: newFilters,
+    })
   }
 
   const handleClearAll = (sourceColumn: string) => {
-    const newFilters = { ...filters }
+    const newFilters = { ...filters.selectedValues }
     newFilters[sourceColumn] = []
-    onFilterChange(newFilters)
+    onFilterChange({
+      ...filters,
+      selectedValues: newFilters,
+    })
+  }
+
+  const handleDateRangeChange = (start: string, end: string) => {
+    onFilterChange({
+      ...filters,
+      claimReportedDateRange: { start, end },
+    })
   }
 
   return (
     <div className="left-panel">
-      <h2>Filters</h2>
+      <div className="collapsible-section-header">
+        <h2>Filters</h2>
+        <button
+          type="button"
+          className="collapse-btn"
+          onClick={() => setIsCollapsed((prev) => !prev)}
+          aria-expanded={!isCollapsed}
+          title={isCollapsed ? 'Expand' : 'Collapse'}
+        >
+          {isCollapsed ? '▶' : '▼'}
+        </button>
+      </div>
 
-      {FILTER_FIELDS.map(({ name, sourceColumn }) => (
+      {!isCollapsed && FILTER_FIELDS.map(({ name, sourceColumns }) => {
+        const sourceColumn = resolveColumnName(sourceColumns)
+
+        return (
         <div key={name} className="filter-group-panel">
           <div className="filter-group-header">
             <h3>{name}</h3>
@@ -81,7 +147,7 @@ export default function LeftPanel({
               >
                 {collapsedSections[name] ? '▶' : '▼'}
               </button>
-              {(filters[sourceColumn]?.length || 0) > 0 && (
+              {(filters.selectedValues[sourceColumn]?.length || 0) > 0 && (
                 <button
                   onClick={() => handleClearAll(sourceColumn)}
                   className="clear-filter-btn"
@@ -100,7 +166,7 @@ export default function LeftPanel({
                   <label key={value} className="filter-checkbox-label">
                     <input
                       type="checkbox"
-                      checked={(filters[sourceColumn] || []).includes(value)}
+                      checked={(filters.selectedValues[sourceColumn] || []).includes(value)}
                       onChange={() => handleToggle(sourceColumn, value)}
                     />
                     <span className="checkbox-text">{value}</span>
@@ -112,7 +178,42 @@ export default function LeftPanel({
             </div>
           )}
         </div>
-      ))}
+      )})}
+
+      {!isCollapsed && <div className="filter-group-panel">
+        <div className="filter-group-header">
+          <h3>Claim Reported Date Range</h3>
+          {(filters.claimReportedDateRange.start || filters.claimReportedDateRange.end) && (
+            <button
+              onClick={() => handleDateRangeChange('', '')}
+              className="clear-filter-btn"
+              title="Clear date range"
+            >
+              ✕
+            </button>
+          )}
+        </div>
+
+        <div className="date-inputs">
+          <input
+            type="date"
+            value={filters.claimReportedDateRange.start}
+            onChange={(e) =>
+              handleDateRangeChange(e.target.value, filters.claimReportedDateRange.end)
+            }
+            placeholder="From"
+          />
+          <span>to</span>
+          <input
+            type="date"
+            value={filters.claimReportedDateRange.end}
+            onChange={(e) =>
+              handleDateRangeChange(filters.claimReportedDateRange.start, e.target.value)
+            }
+            placeholder="To"
+          />
+        </div>
+      </div>}
     </div>
   )
 }

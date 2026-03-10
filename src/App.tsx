@@ -6,13 +6,17 @@ import MatrixReport from './components/MatrixReport'
 import Charts from './components/Charts'
 import FileUpload from './components/FileUpload'
 import FilterSearch from './components/FilterSearch'
-import Slicers from './components/Slicers'
 import LeftPanel from './components/LeftPanel'
 import KeyMetrics from './components/KeyMetrics'
 import './App.css'
 
 interface ExcelData {
   [key: string]: any[]
+}
+
+interface PanelFiltersState {
+  selectedValues: { [key: string]: string[] }
+  claimReportedDateRange: { start: string; end: string }
 }
 
 const isDateLikeField = (fieldName: string): boolean =>
@@ -149,9 +153,11 @@ function App() {
   const [viewMode, setViewMode] = useState<'charts' | 'table' | 'pivot' | 'matrix'>('charts')
   const [searchTerm, setSearchTerm] = useState<string>('')
   const [searchColumn, setSearchColumn] = useState<string>('')
-  const [slicerConfig, setSlicerConfig] = useState<any>(null)
   const [visibleColumns, setVisibleColumns] = useState<string[]>([])
-  const [panelFilters, setPanelFilters] = useState<{ [key: string]: string[] }>({})
+  const [panelFilters, setPanelFilters] = useState<PanelFiltersState>({
+    selectedValues: {},
+    claimReportedDateRange: { start: '', end: '' },
+  })
   const [isLeftSidebarCollapsed, setIsLeftSidebarCollapsed] = useState<boolean>(false)
 
   const handleFileUpload = (file: File) => {
@@ -182,33 +188,26 @@ function App() {
     if (!data || !activeSheet) return
     setSearchTerm(term)
     setSearchColumn(column || '')
-    applyAllFilters(data[activeSheet], term, column, slicerConfig, panelFilters)
+    applyAllFilters(data[activeSheet], term, column, panelFilters)
   }
 
-  const handleSlicerFilter = (config: any) => {
-    setSlicerConfig(config)
-    if (!data || !activeSheet) return
-    applyAllFilters(data[activeSheet], searchTerm, searchColumn || undefined, config, panelFilters)
-  }
-
-  const handlePanelFilterChange = (filters: { [key: string]: string[] }) => {
+  const handlePanelFilterChange = (filters: PanelFiltersState) => {
     setPanelFilters(filters)
     if (!data || !activeSheet) return
-    applyAllFilters(data[activeSheet], searchTerm, searchColumn || undefined, slicerConfig, filters)
+    applyAllFilters(data[activeSheet], searchTerm, searchColumn || undefined, filters)
   }
 
   const applyAllFilters = (
     sheetData: any[],
     searchTerm: string,
     searchColumn?: string,
-    config?: any,
-    panelFilters?: { [key: string]: string[] }
+    panelFilters?: PanelFiltersState
   ) => {
     let filtered = [...sheetData]
 
     // Apply left panel filters
-    if (panelFilters && Object.keys(panelFilters).length > 0) {
-      Object.entries(panelFilters).forEach(([fieldName, selectedValues]: any) => {
+    if (panelFilters && Object.keys(panelFilters.selectedValues).length > 0) {
+      Object.entries(panelFilters.selectedValues).forEach(([fieldName, selectedValues]: any) => {
         if (selectedValues.length > 0) {
           filtered = filtered.filter((row) =>
             selectedValues.includes(String(row[fieldName]))
@@ -217,20 +216,12 @@ function App() {
       })
     }
 
-    // Apply slicer filters
-    if (config) {
-      // Dropdown filters
-      Object.entries(config.dropdowns).forEach(([colName, value]: any) => {
-        if (value) {
-          filtered = filtered.filter((row) => String(row[colName]) === value)
-        }
-      })
-
-      // Date range filter
-      if (config.dateRange) {
-        const { column, start, end } = config.dateRange
+    // Apply claim reported date range filter from left panel
+    if (panelFilters) {
+      const { start, end } = panelFilters.claimReportedDateRange
+      if (start && end) {
         filtered = filtered.filter((row) => {
-          const rowDate = String(row[column])
+          const rowDate = String(row['Claim Reported Date'] ?? '')
           return rowDate >= start && rowDate <= end
         })
       }
@@ -299,8 +290,6 @@ function App() {
                         visibleColumns={visibleColumns}
                         onColumnsChange={setVisibleColumns}
                       />
-
-                      <Slicers data={currentData} onFilter={handleSlicerFilter} />
                     </>
                   )}
 
@@ -324,8 +313,10 @@ function App() {
                       setFilteredData(data[sheet])
                       setSearchTerm('')
                       setSearchColumn('')
-                      setSlicerConfig(null)
-                      setPanelFilters({})
+                      setPanelFilters({
+                        selectedValues: {},
+                        claimReportedDateRange: { start: '', end: '' },
+                      })
                     }}
                   >
                     {sheet}
