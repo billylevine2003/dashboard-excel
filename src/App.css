@@ -563,11 +563,14 @@
   margin-bottom: 14px;
 }
 
-.matrix-table td.number,
-.matrix-table th.number,
 .pivot-table td.number,
 .pivot-table th.number {
   text-align: right;
+}
+
+.matrix-table td.number,
+.matrix-table th.number {
+  text-align: center;
 }
 
 .matrix-table th,
@@ -586,21 +589,49 @@
   border-top: 2px solid #cfd3ff;
 }
 
-.matrix-table th.matrix-col-open-without-pay {
-  background-color: var(--metric-open-without-pay-bg);
-  color: var(--metric-open-without-pay);
+.matrix-table thead tr:first-child th {
+  text-align: center;
+  vertical-align: middle;
+  font-weight: 700;
 }
 
-.matrix-table th.matrix-col-closed-without-pay {
-  background-color: var(--metric-closed-without-pay-bg);
-  color: var(--metric-closed-without-pay);
+.matrix-table th.matrix-group-open {
+  background-color: #eef5ff;
+  color: #2a4a85;
 }
 
-.matrix-table th.matrix-col-open-with-pay,
-.matrix-table th.matrix-col-open-with-pay-paid,
-.matrix-table th.matrix-col-open-with-pay-reserve {
-  background-color: var(--metric-open-with-pay-bg);
-  color: var(--metric-open-with-pay);
+.matrix-table th.matrix-group-closed {
+  background-color: #f6f0ff;
+  color: #523289;
+  border-left: 2px solid #d7def5;
+}
+
+.matrix-table th.matrix-col-open-count,
+.matrix-table th.matrix-col-open-count-without-pay,
+.matrix-table th.matrix-col-open-paid,
+.matrix-table th.matrix-col-open-reserve,
+.matrix-table th.matrix-col-open-average-age {
+  background-color: #f5f9ff;
+  color: #375b9a;
+}
+
+.matrix-table th.matrix-col-closed-count,
+.matrix-table th.matrix-col-closed-count-without-pay,
+.matrix-table th.matrix-col-closed-paid,
+.matrix-table th.matrix-col-closed-reserve {
+  background-color: #faf6ff;
+  color: #66469b;
+}
+
+.matrix-table th.matrix-col-closed-count,
+.matrix-table td.matrix-col-closed-count,
+.matrix-table th.matrix-col-closed-count-without-pay,
+.matrix-table td.matrix-col-closed-count-without-pay,
+.matrix-table th.matrix-col-closed-paid,
+.matrix-table td.matrix-col-closed-paid,
+.matrix-table th.matrix-col-closed-reserve,
+.matrix-table td.matrix-col-closed-reserve {
+  border-left: 2px solid #e0e5f8;
 }
 
 /* Key Metrics */
@@ -697,6 +728,18 @@
   border-left: 4px solid #d0d8f4;
 }
 
+.kpi-card-clickable {
+  cursor: pointer;
+  transition: transform 0.14s ease, box-shadow 0.14s ease;
+}
+
+.kpi-card-clickable:hover,
+.kpi-card-clickable:focus-visible {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 12px rgba(35, 54, 120, 0.12);
+  outline: none;
+}
+
 .kpi-card-open-without-pay {
   border-left-color: var(--metric-open-without-pay);
   background: linear-gradient(180deg, #ffffff 0%, var(--metric-open-without-pay-bg) 100%);
@@ -736,6 +779,18 @@
   margin: 0;
   color: #1f2a4d;
   font-size: 1.6rem;
+  font-weight: 700;
+}
+
+.matrix-drilldown-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.matrix-focus-cell {
+  background: #fff7db;
   font-weight: 700;
 }
 

@@ -22,6 +22,7 @@ interface ChartsProps {
 }
 
 type ChartPreset = 'financial' | 'status' | 'volume' | 'custom'
+const AVERAGE_AGE_LABEL = 'Average Age'
 
 const COLORS = ['#8884d8', '#82ca9d', '#ffc658', '#ff7c7c', '#8dd1e1']
 
@@ -80,7 +81,27 @@ const isExcludedVisualizationMetric = (columnName: string): boolean => {
     'loss reserve change',
   ])
 
-  return exactExcluded.has(normalized)
+  return (
+    exactExcluded.has(normalized) ||
+    normalized.includes('loss initial reserve') ||
+    normalized.includes('loss initial loss reserve') ||
+    normalized.includes('initial reserve')
+  )
+}
+
+const isAgeMetricColumn = (columnName: string): boolean => {
+  const normalized = normalize(columnName)
+  return normalized.includes('age')
+}
+
+const formatCurrencyM = (value: number): string => {
+  const millions = value / 1_000_000
+  const isInteger = Number.isInteger(millions)
+  const formatted = new Intl.NumberFormat('en-US', {
+    minimumFractionDigits: isInteger ? 0 : 1,
+    maximumFractionDigits: isInteger ? 0 : 1,
+  }).format(millions)
+  return `$${formatted}M`
 }
 
 export default function Charts({ data, xAxisKey, numericKeys }: ChartsProps) {
@@ -88,13 +109,14 @@ export default function Charts({ data, xAxisKey, numericKeys }: ChartsProps) {
   const [selectedGroupBy, setSelectedGroupBy] = useState<string>('')
   const [selectedPreset, setSelectedPreset] = useState<ChartPreset>('financial')
 
-  const { allNumericColumns, stringColumns, xAxis } = useMemo<{
+  const { allNumericColumns, stringColumns, xAxis, claimAgeSourceColumn } = useMemo<{
     allNumericColumns: string[]
     stringColumns: string[]
     xAxis: string
+    claimAgeSourceColumn: string
   }>(() => {
     if (!data || data.length === 0) {
-      return { allNumericColumns: [], stringColumns: [], xAxis: '' }
+      return { allNumericColumns: [], stringColumns: [], xAxis: '', claimAgeSourceColumn: '' }
     }
 
     const isDateColumn = (col: string) => {
@@ -103,17 +125,26 @@ export default function Charts({ data, xAxisKey, numericKeys }: ChartsProps) {
     }
 
     const columns = Object.keys(data[0])
+    const claimAgeSource =
+      findMatchingColumn(columns, 'Claim Age (Days)') ||
+      findMatchingColumn(columns, 'Claim Age Days') ||
+      ''
+
     const numericColumns = columns.filter((col) => {
       const normalized = col.trim().toLowerCase()
       return (
         normalized !== 'claim number' &&
         !isExcludedVisualizationMetric(col) &&
+        !isAgeMetricColumn(col) &&
         !isDateColumn(col) &&
         data.some((row) => typeof row[col] === 'number')
       )
     })
 
     numericColumns.push('Count')
+    if (claimAgeSource) {
+      numericColumns.push(AVERAGE_AGE_LABEL)
+    }
 
     const stringCols = columns.filter((col) => {
       const isDateField = isDateColumn(col)
@@ -127,6 +158,7 @@ export default function Charts({ data, xAxisKey, numericKeys }: ChartsProps) {
       allNumericColumns: numericColumns,
       stringColumns: stringCols,
       xAxis: xAxisCol,
+      claimAgeSourceColumn: claimAgeSource,
     }
   }, [data, xAxisKey])
 
@@ -202,10 +234,9 @@ export default function Charts({ data, xAxisKey, numericKeys }: ChartsProps) {
     const financialMetrics = findMetrics([
       'Direct Loss Paid ITD',
       'Direct Loss Reserve Outstanding',
-      'Count',
     ])
 
-    const statusMetrics = findMetrics(['Count', 'Direct Loss Paid ITD'])
+    const statusMetrics = findMetrics(['Count', AVERAGE_AGE_LABEL])
     const volumeMetrics = findMetrics(['Count', 'Direct Loss Paid ITD'])
 
     return {
@@ -284,6 +315,7 @@ export default function Charts({ data, xAxisKey, numericKeys }: ChartsProps) {
     }
 
     const grouped: { [key: string]: any } = {}
+    const averageAgeAccumulator: { [key: string]: { sum: number; count: number } } = {}
 
     data.forEach((row) => {
       const groupKey = String(row[selectedGroupBy])
@@ -292,14 +324,33 @@ export default function Charts({ data, xAxisKey, numericKeys }: ChartsProps) {
         allNumericColumns.forEach((col) => {
           grouped[groupKey][col] = 0
         })
+        averageAgeAccumulator[groupKey] = { sum: 0, count: 0 }
       }
       grouped[groupKey].Count += 1
       allNumericColumns.forEach((col) => {
+        if (col === AVERAGE_AGE_LABEL) {
+          return
+        }
         if (typeof row[col] === 'number') {
           grouped[groupKey][col] += row[col]
         }
       })
+
+      if (claimAgeSourceColumn) {
+        const rawAgeValue = row[claimAgeSourceColumn]
+        if (typeof rawAgeValue === 'number' && Number.isFinite(rawAgeValue)) {
+          averageAgeAccumulator[groupKey].sum += rawAgeValue
+          averageAgeAccumulator[groupKey].count += 1
+        }
+      }
     })
+
+    if (allNumericColumns.includes(AVERAGE_AGE_LABEL)) {
+      Object.keys(grouped).forEach((groupKey) => {
+        const { sum, count } = averageAgeAccumulator[groupKey]
+        grouped[groupKey][AVERAGE_AGE_LABEL] = count > 0 ? sum / count : 0
+      })
+    }
 
     const rows = Object.values(grouped)
     const isDateLikeGroup = /date|month|year/i.test(selectedGroupBy)
@@ -328,7 +379,30 @@ export default function Charts({ data, xAxisKey, numericKeys }: ChartsProps) {
         sensitivity: 'base',
       })
     })
-  }, [allNumericColumns, data, selectedGroupBy])
+  }, [allNumericColumns, claimAgeSourceColumn, data, selectedGroupBy])
+
+  const useWholeDollarAxis = useMemo(
+    () =>
+      selectedNumericKeys.length > 0 &&
+      selectedNumericKeys.every((metric) => {
+        const normalized = normalize(metric)
+        return normalized.includes('paid') || normalized.includes('reserve')
+      }),
+    [selectedNumericKeys]
+  )
+
+  const tooltipFormatter = (value: number | string, name: string) => {
+    if (!useWholeDollarAxis) {
+      return [value, name]
+    }
+
+    const numericValue = typeof value === 'number' ? value : Number(value)
+    if (!Number.isFinite(numericValue)) {
+      return [value, name]
+    }
+
+    return [formatCurrencyM(numericValue), name]
+  }
 
   const handleColumnToggle = (col: string) => {
     setSelectedPreset('custom')
@@ -420,8 +494,8 @@ export default function Charts({ data, xAxisKey, numericKeys }: ChartsProps) {
               <BarChart data={groupedData}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey={selectedGroupBy || xAxis} />
-                <YAxis />
-                <Tooltip />
+                <YAxis tickFormatter={useWholeDollarAxis ? (value) => formatCurrencyM(Number(value)) : undefined} />
+                <Tooltip formatter={tooltipFormatter} />
                 <Legend />
                 {selectedNumericKeys.map((col, idx) => (
                   <Bar
@@ -440,8 +514,8 @@ export default function Charts({ data, xAxisKey, numericKeys }: ChartsProps) {
               <LineChart data={groupedData}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey={selectedGroupBy || xAxis} />
-                <YAxis />
-                <Tooltip />
+                <YAxis tickFormatter={useWholeDollarAxis ? (value) => formatCurrencyM(Number(value)) : undefined} />
+                <Tooltip formatter={tooltipFormatter} />
                 <Legend />
                 {selectedNumericKeys.map((col, idx) => (
                   <Line
@@ -475,7 +549,7 @@ export default function Charts({ data, xAxisKey, numericKeys }: ChartsProps) {
                       />
                     ))}
                   </Pie>
-                  <Tooltip />
+                  <Tooltip formatter={tooltipFormatter} />
                 </PieChart>
               </ResponsiveContainer>
             </div>

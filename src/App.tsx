@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import * as XLSX from 'xlsx'
 import DataTable from './components/DataTable'
 import PivotTable from './components/PivotTable'
@@ -18,6 +18,14 @@ interface PanelFiltersState {
   selectedValues: { [key: string]: string[] }
   claimReportedDateRange: { start: string; end: string }
 }
+
+type MatrixDrilldownTarget =
+  | 'open-claims'
+  | 'open-without-pay'
+  | 'closed-without-pay'
+  | 'without-pay-all'
+  | 'open-with-pay-paid'
+  | 'open-with-pay-reserve'
 
 const isDateLikeField = (fieldName: string): boolean =>
   fieldName.trim().toLowerCase().includes('date')
@@ -159,6 +167,16 @@ function App() {
     claimReportedDateRange: { start: '', end: '' },
   })
   const [isLeftSidebarCollapsed, setIsLeftSidebarCollapsed] = useState<boolean>(false)
+  const [matrixDrilldownTarget, setMatrixDrilldownTarget] = useState<MatrixDrilldownTarget | null>(null)
+  const matrixSectionRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    if (viewMode !== 'matrix' || !matrixDrilldownTarget) {
+      return
+    }
+
+    matrixSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [viewMode, matrixDrilldownTarget])
 
   const handleFileUpload = (file: File) => {
     const reader = new FileReader()
@@ -253,6 +271,11 @@ function App() {
     XLSX.writeFile(workbook, 'dashboard-export.xlsx')
   }
 
+  const handleMetricDrilldown = (target: MatrixDrilldownTarget) => {
+    setMatrixDrilldownTarget(target)
+    setViewMode('matrix')
+  }
+
   const currentData = activeSheet && data ? data[activeSheet] : null
 
   return (
@@ -326,7 +349,10 @@ function App() {
 
               {currentData && (
                 <>
-                  <KeyMetrics data={filteredData || currentData} />
+                  <KeyMetrics
+                    data={filteredData || currentData}
+                    onDrillDown={handleMetricDrilldown}
+                  />
 
                   <div className="view-toggle">
                     <button
@@ -384,8 +410,12 @@ function App() {
                   )}
 
                   {viewMode === 'matrix' && (
-                    <div className="table-section">
-                      <MatrixReport data={filteredData || currentData} />
+                    <div className="table-section" ref={matrixSectionRef}>
+                      <MatrixReport
+                        data={filteredData || currentData}
+                        drilldownTarget={matrixDrilldownTarget}
+                        onClearDrilldown={() => setMatrixDrilldownTarget(null)}
+                      />
                     </div>
                   )}
                 </>

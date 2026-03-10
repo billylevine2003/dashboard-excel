@@ -1,8 +1,17 @@
-import { useMemo, useState } from 'react'
+import { KeyboardEvent, useMemo, useState } from 'react'
 
 interface KeyMetricsProps {
   data: any[]
+  onDrillDown?: (target: MatrixDrilldownTarget) => void
 }
+
+type MatrixDrilldownTarget =
+  | 'open-claims'
+  | 'open-without-pay'
+  | 'closed-without-pay'
+  | 'without-pay-all'
+  | 'open-with-pay-paid'
+  | 'open-with-pay-reserve'
 
 const normalize = (value: string): string => value.trim().toLowerCase()
 
@@ -118,8 +127,26 @@ const getAgeInDaysFromReportDate = (value: unknown): number | null => {
   return Math.floor(diffMs / (1000 * 60 * 60 * 24))
 }
 
-export default function KeyMetrics({ data }: KeyMetricsProps) {
+export default function KeyMetrics({ data, onDrillDown }: KeyMetricsProps) {
   const [collapsed, setCollapsed] = useState(false)
+
+  const getDrilldownProps = (target: MatrixDrilldownTarget) => {
+    if (!onDrillDown) {
+      return {}
+    }
+
+    return {
+      role: 'button' as const,
+      tabIndex: 0,
+      onClick: () => onDrillDown(target),
+      onKeyDown: (event: KeyboardEvent<HTMLElement>) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault()
+          onDrillDown(target)
+        }
+      },
+    }
+  }
 
   if (!data || data.length === 0) {
     return null
@@ -261,22 +288,22 @@ export default function KeyMetrics({ data }: KeyMetricsProps) {
         <>
           <h3 className="kpi-row-title">Open</h3>
           <div className="kpi-grid kpi-grid-money">
-            <article className="kpi-card kpi-card-claim-count">
+            <article className="kpi-card kpi-card-claim-count kpi-card-clickable" {...getDrilldownProps('open-claims')}>
               <p className="kpi-label">Count</p>
               <p className="kpi-value">{formatInteger(statusSummary.open.count)}</p>
             </article>
 
-            <article className="kpi-card kpi-card-total-paid">
+            <article className="kpi-card kpi-card-total-paid kpi-card-clickable" {...getDrilldownProps('open-with-pay-paid')}>
               <p className="kpi-label">Paid ITD</p>
               <p className="kpi-value">{formatCurrency(statusSummary.open.paidItd)}</p>
             </article>
 
-            <article className="kpi-card kpi-card-total-reserve">
+            <article className="kpi-card kpi-card-total-reserve kpi-card-clickable" {...getDrilldownProps('open-with-pay-reserve')}>
               <p className="kpi-label">Direct Loss Reserve Outstanding</p>
               <p className="kpi-value">{formatCurrency(statusSummary.open.reserveOutstanding)}</p>
             </article>
 
-            <article className="kpi-card kpi-card-open-without-pay">
+            <article className="kpi-card kpi-card-open-without-pay kpi-card-clickable" {...getDrilldownProps('open-without-pay')}>
               <p className="kpi-label">Claims Without Pay</p>
               <p className="kpi-value">{formatInteger(statusSummary.open.withoutPayCount)}</p>
             </article>
@@ -308,7 +335,7 @@ export default function KeyMetrics({ data }: KeyMetricsProps) {
               <p className="kpi-value">{formatCurrency(statusSummary.closed.reserveOutstanding)}</p>
             </article>
 
-            <article className="kpi-card kpi-card-open-without-pay">
+            <article className="kpi-card kpi-card-closed-without-pay kpi-card-clickable" {...getDrilldownProps('closed-without-pay')}>
               <p className="kpi-label">Claims Without Pay</p>
               <p className="kpi-value">{formatInteger(statusSummary.closed.withoutPayCount)}</p>
             </article>
@@ -336,7 +363,7 @@ export default function KeyMetrics({ data }: KeyMetricsProps) {
               <p className="kpi-value">{formatCurrency(statusSummary.total.reserveOutstanding)}</p>
             </article>
 
-            <article className="kpi-card kpi-card-open-without-pay">
+            <article className="kpi-card kpi-card-open-without-pay kpi-card-clickable" {...getDrilldownProps('without-pay-all')}>
               <p className="kpi-label">Claims Without Pay</p>
               <p className="kpi-value">{formatInteger(statusSummary.total.withoutPayCount)}</p>
             </article>

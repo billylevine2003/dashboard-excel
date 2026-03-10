@@ -1,16 +1,32 @@
-timport { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 
 interface MatrixReportProps {
   data: any[]
+  drilldownTarget?: MatrixDrilldownTarget | null
+  onClearDrilldown?: () => void
 }
+
+type MatrixDrilldownTarget =
+  | 'open-claims'
+  | 'open-without-pay'
+  | 'closed-without-pay'
+  | 'without-pay-all'
+  | 'open-with-pay-paid'
+  | 'open-with-pay-reserve'
 
 interface MatrixRow {
   adjuster: string
   openWithoutPayCount: number
   closedWithoutPayCount: number
   openWithPayCount: number
+  closedWithPayCount: number
   openWithPayPaidItd: number
+  closedWithPayPaidItd: number
   openWithPayReserveOutstanding: number
+  openReserveOutstanding: number
+  closedReserveOutstanding: number
+  openAgeSum: number
+  openAgeCount: number
 }
 
 const normalizeText = (value: unknown): string => String(value ?? '').trim().toLowerCase()
@@ -49,6 +65,54 @@ const parseNumber = (value: unknown): number => {
   return 0
 }
 
+const parseDateValue = (value: unknown): Date | null => {
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return value
+  }
+
+  if (typeof value !== 'string') {
+    return null
+  }
+
+  const trimmed = value.trim()
+  if (!trimmed) {
+    return null
+  }
+
+  const isoMatch = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  if (isoMatch) {
+    const year = Number(isoMatch[1])
+    const month = Number(isoMatch[2]) - 1
+    const day = Number(isoMatch[3])
+    return new Date(year, month, day)
+  }
+
+  const parsedTime = Date.parse(trimmed)
+  if (Number.isNaN(parsedTime)) {
+    return null
+  }
+
+  return new Date(parsedTime)
+}
+
+const getAgeInDaysFromReportDate = (value: unknown): number | null => {
+  const parsedDate = parseDateValue(value)
+  if (!parsedDate) {
+    return null
+  }
+
+  const today = new Date()
+  const reportUtc = Date.UTC(parsedDate.getFullYear(), parsedDate.getMonth(), parsedDate.getDate())
+  const todayUtc = Date.UTC(today.getFullYear(), today.getMonth(), today.getDate())
+  const diffMs = todayUtc - reportUtc
+
+  if (diffMs < 0) {
+    return 0
+  }
+
+  return Math.floor(diffMs / (1000 * 60 * 60 * 24))
+}
+
 const formatCurrency = (value: number): string =>
   new Intl.NumberFormat('en-US', {
     style: 'currency',
@@ -74,23 +138,35 @@ const findDefaultColumn = (columns: string[], options: string[]): string => {
   return ''
 }
 
-export default function MatrixReport({ data }: MatrixReportProps) {
+export default function MatrixReport({ data, drilldownTarget, onClearDrilldown }: MatrixReportProps) {
   const columns = useMemo(() => (data.length > 0 ? Object.keys(data[0]) : []), [data])
 
   const [adjusterColumn, setAdjusterColumn] = useState<string>(() =>
     findDefaultColumn(columns, ['claim component adjuster code', 'component adjuster', 'adjuster'])
   )
-  const [statusColumn, setStatusColumn] = useState<string>(() =>
-    findDefaultColumn(columns, ['claim status', 'status'])
+  const statusColumn = useMemo(
+    () => findDefaultColumn(columns, ['claim status', 'status']),
+    [columns]
   )
-  const [claimIdColumn, setClaimIdColumn] = useState<string>(() =>
-    findDefaultColumn(columns, ['claim number', 'claim id', 'claim'])
+  const claimIdColumn = useMemo(
+    () => findDefaultColumn(columns, ['claim number', 'claim id', 'claim']),
+    [columns]
   )
-  const [paidAmountColumn, setPaidAmountColumn] = useState<string>(() =>
-    findDefaultColumn(columns, ['direct loss paid itd', 'direct loss paid', 'paid'])
+  const paidAmountColumn = useMemo(
+    () => findDefaultColumn(columns, ['direct loss paid itd', 'direct loss paid', 'paid']),
+    [columns]
   )
-  const [reserveOutstandingColumn, setReserveOutstandingColumn] = useState<string>(() =>
-    findDefaultColumn(columns, ['direct loss reserve outstanding', 'reserve outstanding'])
+  const reserveOutstandingColumn = useMemo(
+    () => findDefaultColumn(columns, ['direct loss reserve outstanding', 'reserve outstanding']),
+    [columns]
+  )
+  const claimReportedDateColumn = useMemo(
+    () => findDefaultColumn(columns, ['claim reported date', 'reported date', 'report date']),
+    [columns]
+  )
+  const claimAgeDaysColumn = useMemo(
+    () => findDefaultColumn(columns, ['claim age (days)', 'claim age days']),
+    [columns]
   )
 
   useEffect(() => {
@@ -99,21 +175,7 @@ export default function MatrixReport({ data }: MatrixReportProps) {
         findDefaultColumn(columns, ['claim component adjuster code', 'component adjuster', 'adjuster'])
       )
     }
-    if (!columns.includes(statusColumn)) {
-      setStatusColumn(findDefaultColumn(columns, ['claim status', 'status']))
-    }
-    if (!columns.includes(claimIdColumn)) {
-      setClaimIdColumn(findDefaultColumn(columns, ['claim number', 'claim id', 'claim']))
-    }
-    if (!columns.includes(paidAmountColumn)) {
-      setPaidAmountColumn(findDefaultColumn(columns, ['direct loss paid itd', 'direct loss paid', 'paid']))
-    }
-    if (!columns.includes(reserveOutstandingColumn)) {
-      setReserveOutstandingColumn(
-        findDefaultColumn(columns, ['direct loss reserve outstanding', 'reserve outstanding'])
-      )
-    }
-  }, [columns, adjusterColumn, statusColumn, claimIdColumn, paidAmountColumn, reserveOutstandingColumn])
+  }, [columns, adjusterColumn])
 
   const matrixRows = useMemo<MatrixRow[]>(() => {
     if (!adjusterColumn || !statusColumn) {
@@ -124,6 +186,10 @@ export default function MatrixReport({ data }: MatrixReportProps) {
     const seenByAdjusterOpenWithoutPay = new Map<string, Set<string>>()
     const seenByAdjusterClosedWithoutPay = new Map<string, Set<string>>()
     const seenByAdjusterOpenWithPay = new Map<string, Set<string>>()
+    const seenByAdjusterClosedWithPay = new Map<string, Set<string>>()
+    const seenByAdjusterOpenReserve = new Map<string, Set<string>>()
+    const seenByAdjusterClosedReserve = new Map<string, Set<string>>()
+    const seenByAdjusterOpenAge = new Map<string, Set<string>>()
 
     data.forEach((row) => {
       const adjuster = String(row[adjusterColumn] ?? '-').trim() || '-'
@@ -139,27 +205,55 @@ export default function MatrixReport({ data }: MatrixReportProps) {
           openWithoutPayCount: 0,
           closedWithoutPayCount: 0,
           openWithPayCount: 0,
+          closedWithPayCount: 0,
           openWithPayPaidItd: 0,
+          closedWithPayPaidItd: 0,
           openWithPayReserveOutstanding: 0,
+          openReserveOutstanding: 0,
+          closedReserveOutstanding: 0,
+          openAgeSum: 0,
+          openAgeCount: 0,
         })
         seenByAdjusterOpenWithoutPay.set(adjuster, new Set<string>())
         seenByAdjusterClosedWithoutPay.set(adjuster, new Set<string>())
         seenByAdjusterOpenWithPay.set(adjuster, new Set<string>())
+        seenByAdjusterClosedWithPay.set(adjuster, new Set<string>())
+        seenByAdjusterOpenReserve.set(adjuster, new Set<string>())
+        seenByAdjusterClosedReserve.set(adjuster, new Set<string>())
+        seenByAdjusterOpenAge.set(adjuster, new Set<string>())
       }
 
       const existing = grouped.get(adjuster)
       const openWithoutPaySeen = seenByAdjusterOpenWithoutPay.get(adjuster)
       const closedWithoutPaySeen = seenByAdjusterClosedWithoutPay.get(adjuster)
       const openWithPaySeen = seenByAdjusterOpenWithPay.get(adjuster)
+      const closedWithPaySeen = seenByAdjusterClosedWithPay.get(adjuster)
+      const openReserveSeen = seenByAdjusterOpenReserve.get(adjuster)
+      const closedReserveSeen = seenByAdjusterClosedReserve.get(adjuster)
+      const openAgeSeen = seenByAdjusterOpenAge.get(adjuster)
       if (!existing) {
         return
       }
-      if (!openWithoutPaySeen || !closedWithoutPaySeen || !openWithPaySeen) {
+      if (
+        !openWithoutPaySeen ||
+        !closedWithoutPaySeen ||
+        !openWithPaySeen ||
+        !closedWithPaySeen ||
+        !openReserveSeen ||
+        !closedReserveSeen ||
+        !openAgeSeen
+      ) {
         return
       }
 
       const statusBucket = getStatusBucket(status)
       const paidAmount = paidAmountColumn ? parseNumber(row[paidAmountColumn]) : 0
+      const reserveAmount = reserveOutstandingColumn ? parseNumber(row[reserveOutstandingColumn]) : 0
+      const fallbackAgeDays = claimAgeDaysColumn ? parseNumber(row[claimAgeDaysColumn]) : 0
+      const ageDaysFromReportDate = claimReportedDateColumn
+        ? getAgeInDaysFromReportDate(row[claimReportedDateColumn])
+        : null
+      const openAgeDays = ageDaysFromReportDate ?? (fallbackAgeDays > 0 ? fallbackAgeDays : null)
 
       if (statusBucket === 'open' && paidAmount <= 0 && !openWithoutPaySeen.has(rowKey)) {
         openWithoutPaySeen.add(rowKey)
@@ -171,6 +265,12 @@ export default function MatrixReport({ data }: MatrixReportProps) {
         existing.closedWithoutPayCount += 1
       }
 
+      if (statusBucket === 'closed' && paidAmount > 0 && !closedWithPaySeen.has(rowKey)) {
+        closedWithPaySeen.add(rowKey)
+        existing.closedWithPayCount += 1
+        existing.closedWithPayPaidItd += paidAmount
+      }
+
       if (statusBucket === 'open' && paidAmount > 0 && !openWithPaySeen.has(rowKey)) {
         openWithPaySeen.add(rowKey)
         existing.openWithPayCount += 1
@@ -179,30 +279,112 @@ export default function MatrixReport({ data }: MatrixReportProps) {
           ? parseNumber(row[reserveOutstandingColumn])
           : 0
       }
+
+      if (statusBucket === 'open' && !openReserveSeen.has(rowKey)) {
+        openReserveSeen.add(rowKey)
+        existing.openReserveOutstanding += reserveAmount
+      }
+
+      if (statusBucket === 'open' && openAgeDays !== null && !openAgeSeen.has(rowKey)) {
+        openAgeSeen.add(rowKey)
+        existing.openAgeSum += openAgeDays
+        existing.openAgeCount += 1
+      }
+
+      if (statusBucket === 'closed' && !closedReserveSeen.has(rowKey)) {
+        closedReserveSeen.add(rowKey)
+        existing.closedReserveOutstanding += reserveAmount
+      }
     })
 
     return Array.from(grouped.values()).sort((a, b) => a.adjuster.localeCompare(b.adjuster))
-  }, [data, adjusterColumn, statusColumn, claimIdColumn, paidAmountColumn, reserveOutstandingColumn])
+  }, [
+    data,
+    adjusterColumn,
+    statusColumn,
+    claimIdColumn,
+    paidAmountColumn,
+    reserveOutstandingColumn,
+    claimReportedDateColumn,
+    claimAgeDaysColumn,
+  ])
+
+  const drilledRows = useMemo(() => {
+    if (!drilldownTarget) {
+      return matrixRows
+    }
+
+    if (drilldownTarget === 'open-claims') {
+      return matrixRows.filter((row) => row.openWithoutPayCount + row.openWithPayCount > 0)
+    }
+
+    if (drilldownTarget === 'open-without-pay') {
+      return matrixRows.filter((row) => row.openWithoutPayCount > 0)
+    }
+
+    if (drilldownTarget === 'closed-without-pay') {
+      return matrixRows.filter((row) => row.closedWithoutPayCount > 0)
+    }
+
+    if (drilldownTarget === 'without-pay-all') {
+      return matrixRows.filter((row) => row.openWithoutPayCount + row.closedWithoutPayCount > 0)
+    }
+
+    if (drilldownTarget === 'open-with-pay-paid' || drilldownTarget === 'open-with-pay-reserve') {
+      return matrixRows.filter((row) => row.openWithPayCount > 0)
+    }
+
+    return matrixRows
+  }, [matrixRows, drilldownTarget])
 
   const matrixTotals = useMemo(() =>
-    matrixRows.reduce(
+    drilledRows.reduce(
       (totals, row) => ({
         openWithoutPayCount: totals.openWithoutPayCount + row.openWithoutPayCount,
         closedWithoutPayCount: totals.closedWithoutPayCount + row.closedWithoutPayCount,
         openWithPayCount: totals.openWithPayCount + row.openWithPayCount,
+        closedWithPayCount: totals.closedWithPayCount + row.closedWithPayCount,
         openWithPayPaidItd: totals.openWithPayPaidItd + row.openWithPayPaidItd,
+        closedWithPayPaidItd: totals.closedWithPayPaidItd + row.closedWithPayPaidItd,
         openWithPayReserveOutstanding:
           totals.openWithPayReserveOutstanding + row.openWithPayReserveOutstanding,
+        openReserveOutstanding: totals.openReserveOutstanding + row.openReserveOutstanding,
+        closedReserveOutstanding: totals.closedReserveOutstanding + row.closedReserveOutstanding,
+        openAgeSum: totals.openAgeSum + row.openAgeSum,
+        openAgeCount: totals.openAgeCount + row.openAgeCount,
       }),
       {
         openWithoutPayCount: 0,
         closedWithoutPayCount: 0,
         openWithPayCount: 0,
+        closedWithPayCount: 0,
         openWithPayPaidItd: 0,
+        closedWithPayPaidItd: 0,
         openWithPayReserveOutstanding: 0,
+        openReserveOutstanding: 0,
+        closedReserveOutstanding: 0,
+        openAgeSum: 0,
+        openAgeCount: 0,
       }
     ),
-  [matrixRows])
+  [drilledRows])
+
+  const drilldownLabel = useMemo(() => {
+    if (!drilldownTarget) {
+      return ''
+    }
+
+    const labels: Record<MatrixDrilldownTarget, string> = {
+      'open-claims': 'Open claim count',
+      'open-without-pay': 'Open claims without pay',
+      'closed-without-pay': 'Closed claims without pay',
+      'without-pay-all': 'Total claims without pay',
+      'open-with-pay-paid': 'Open paid ITD',
+      'open-with-pay-reserve': 'Open direct loss reserve outstanding',
+    }
+
+    return labels[drilldownTarget]
+  }, [drilldownTarget])
 
   if (!data || data.length === 0) {
     return <div className="table-container">No data to display</div>
@@ -212,9 +394,20 @@ export default function MatrixReport({ data }: MatrixReportProps) {
     <div className="table-container matrix-container">
       <h2>Matrix Report</h2>
 
+      {drilldownTarget && (
+        <div className="table-note matrix-drilldown-banner">
+          <span>
+            Drill-down active: <strong>{drilldownLabel}</strong> ({drilledRows.length} adjusters)
+          </span>
+          <button type="button" className="left-sidebar-toggle" onClick={onClearDrilldown}>
+            Reset
+          </button>
+        </div>
+      )}
+
       <div className="matrix-controls">
         <div className="pivot-control-group">
-          <label htmlFor="matrix-adjuster-column">Row Field (Component Adjuster)</label>
+          <label htmlFor="matrix-adjuster-column">Row Field (Adjuster)</label>
           <select
             id="matrix-adjuster-column"
             value={adjusterColumn}
@@ -222,74 +415,6 @@ export default function MatrixReport({ data }: MatrixReportProps) {
             className="pivot-select"
           >
             <option value="">Select a column...</option>
-            {columns.map((column) => (
-              <option key={column} value={column}>
-                {column}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div className="pivot-control-group">
-          <label htmlFor="matrix-status-column">Status Field</label>
-          <select
-            id="matrix-status-column"
-            value={statusColumn}
-            onChange={(e) => setStatusColumn(e.target.value)}
-            className="pivot-select"
-          >
-            <option value="">Select a column...</option>
-            {columns.map((column) => (
-              <option key={column} value={column}>
-                {column}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div className="pivot-control-group">
-          <label htmlFor="matrix-claim-id-column">Claim Identifier Field</label>
-          <select
-            id="matrix-claim-id-column"
-            value={claimIdColumn}
-            onChange={(e) => setClaimIdColumn(e.target.value)}
-            className="pivot-select"
-          >
-            <option value="">No claim ID (count rows)</option>
-            {columns.map((column) => (
-              <option key={column} value={column}>
-                {column}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div className="pivot-control-group">
-          <label htmlFor="matrix-paid-amount-column">Paid Amount Field</label>
-          <select
-            id="matrix-paid-amount-column"
-            value={paidAmountColumn}
-            onChange={(e) => setPaidAmountColumn(e.target.value)}
-            className="pivot-select"
-          >
-            <option value="">No paid amount column (treat as 0)</option>
-            {columns.map((column) => (
-              <option key={column} value={column}>
-                {column}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div className="pivot-control-group">
-          <label htmlFor="matrix-reserve-outstanding-column">Reserve Outstanding Field</label>
-          <select
-            id="matrix-reserve-outstanding-column"
-            value={reserveOutstandingColumn}
-            onChange={(e) => setReserveOutstandingColumn(e.target.value)}
-            className="pivot-select"
-          >
-            <option value="">No reserve column (treat as 0)</option>
             {columns.map((column) => (
               <option key={column} value={column}>
                 {column}
@@ -306,34 +431,56 @@ export default function MatrixReport({ data }: MatrixReportProps) {
           <table className="pivot-table matrix-table">
             <thead>
               <tr>
-                <th>{adjusterColumn}</th>
-                <th className="matrix-col-open-without-pay">Claims Open Without Pay</th>
-                <th className="matrix-col-closed-without-pay">Claims Closed Without Pay</th>
-                <th className="matrix-col-open-with-pay">Claims Open With Pay</th>
-                <th className="matrix-col-open-with-pay-paid">Open With Pay - Paid ITD</th>
-                <th className="matrix-col-open-with-pay-reserve">Open With Pay - Direct Loss Reserve Outstanding</th>
+                <th rowSpan={2}>Adjuster</th>
+                <th className="matrix-group-open" colSpan={5}>Open</th>
+                <th className="matrix-group-closed" colSpan={4}>Closed</th>
+              </tr>
+              <tr>
+                <th className="matrix-col-open-count">Count Paid</th>
+                <th className="matrix-col-open-count-without-pay">Count Without Pay</th>
+                <th className="matrix-col-open-paid">Paid</th>
+                <th className="matrix-col-open-reserve">Reserves</th>
+                <th className="matrix-col-open-average-age">Average Age</th>
+                <th className="matrix-col-closed-count">Count Paid</th>
+                <th className="matrix-col-closed-count-without-pay">Count Without Pay</th>
+                <th className="matrix-col-closed-paid">Paid</th>
+                <th className="matrix-col-closed-reserve">Reserves</th>
               </tr>
             </thead>
             <tbody>
-              {matrixRows.map((row) => (
+              {drilledRows.map((row) => (
                 <tr key={row.adjuster}>
                   <td>{row.adjuster}</td>
-                  <td className="number">{row.openWithoutPayCount}</td>
-                  <td className="number">{row.closedWithoutPayCount}</td>
-                  <td className="number">{row.openWithPayCount}</td>
-                  <td className="number">{formatCurrency(row.openWithPayPaidItd)}</td>
-                  <td className="number">{formatCurrency(row.openWithPayReserveOutstanding)}</td>
+                  <td className={`number matrix-col-open-count ${drilldownTarget === 'open-claims' || drilldownTarget === 'open-with-pay-paid' ? 'matrix-focus-cell' : ''}`}>{row.openWithPayCount}</td>
+                  <td className={`number matrix-col-open-count-without-pay ${drilldownTarget === 'open-without-pay' || drilldownTarget === 'without-pay-all' ? 'matrix-focus-cell' : ''}`}>{row.openWithoutPayCount}</td>
+                  <td className={`number matrix-col-open-paid ${drilldownTarget === 'open-with-pay-paid' ? 'matrix-focus-cell' : ''}`}>{formatCurrency(row.openWithPayPaidItd)}</td>
+                  <td className={`number ${drilldownTarget === 'open-with-pay-reserve' ? 'matrix-focus-cell' : ''}`}>{formatCurrency(row.openReserveOutstanding)}</td>
+                  <td className="number matrix-col-open-average-age">
+                    {row.openAgeCount > 0 ? `${Math.round(row.openAgeSum / row.openAgeCount)} days` : 'N/A'}
+                  </td>
+                  <td className="number matrix-col-closed-count">{row.closedWithPayCount}</td>
+                  <td className={`number matrix-col-closed-count-without-pay ${drilldownTarget === 'closed-without-pay' || drilldownTarget === 'without-pay-all' ? 'matrix-focus-cell' : ''}`}>{row.closedWithoutPayCount}</td>
+                  <td className="number matrix-col-closed-paid">{formatCurrency(row.closedWithPayPaidItd)}</td>
+                  <td className="number matrix-col-closed-reserve">{formatCurrency(row.closedReserveOutstanding)}</td>
                 </tr>
               ))}
             </tbody>
             <tfoot>
               <tr className="matrix-total-row">
                 <td>Total</td>
-                <td className="number">{matrixTotals.openWithoutPayCount}</td>
-                <td className="number">{matrixTotals.closedWithoutPayCount}</td>
-                <td className="number">{matrixTotals.openWithPayCount}</td>
-                <td className="number">{formatCurrency(matrixTotals.openWithPayPaidItd)}</td>
-                <td className="number">{formatCurrency(matrixTotals.openWithPayReserveOutstanding)}</td>
+                <td className="number matrix-col-open-count">{matrixTotals.openWithPayCount}</td>
+                <td className="number matrix-col-open-count-without-pay">{matrixTotals.openWithoutPayCount}</td>
+                <td className="number matrix-col-open-paid">{formatCurrency(matrixTotals.openWithPayPaidItd)}</td>
+                <td className="number">{formatCurrency(matrixTotals.openReserveOutstanding)}</td>
+                <td className="number matrix-col-open-average-age">
+                  {matrixTotals.openAgeCount > 0
+                    ? `${Math.round(matrixTotals.openAgeSum / matrixTotals.openAgeCount)} days`
+                    : 'N/A'}
+                </td>
+                <td className="number matrix-col-closed-count">{matrixTotals.closedWithPayCount}</td>
+                <td className="number matrix-col-closed-count-without-pay">{matrixTotals.closedWithoutPayCount}</td>
+                <td className="number matrix-col-closed-paid">{formatCurrency(matrixTotals.closedWithPayPaidItd)}</td>
+                <td className="number matrix-col-closed-reserve">{formatCurrency(matrixTotals.closedReserveOutstanding)}</td>
               </tr>
             </tfoot>
           </table>
