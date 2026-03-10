@@ -126,6 +126,23 @@ const getClaimAgeCategory = (ageDays: number | null): string => {
   return '>60'
 }
 
+const findColumnKey = (row: Record<string, unknown>, candidateNames: string[]): string | null => {
+  const normalizedMap = new Map<string, string>()
+
+  Object.keys(row).forEach((key) => {
+    normalizedMap.set(key.trim().toLowerCase(), key)
+  })
+
+  for (const candidate of candidateNames) {
+    const resolved = normalizedMap.get(candidate.trim().toLowerCase())
+    if (resolved) {
+      return resolved
+    }
+  }
+
+  return null
+}
+
 const normalizeDateFieldsInRow = (row: Record<string, unknown>): Record<string, unknown> => {
   const normalized: Record<string, unknown> = { ...row }
 
@@ -149,6 +166,28 @@ const normalizeDateFieldsInRow = (row: Record<string, unknown>): Record<string, 
     normalized['Claim Age (Days)'] = claimAgeDays ?? ''
     normalized['Claim Age Category'] = getClaimAgeCategory(claimAgeDays)
   }
+
+  const examinerCodeKey = findColumnKey(normalized, [
+    'Examiner ID Code',
+    'Examiner Id Code',
+    'Examiner IDCode',
+    'Examiner IdCode',
+    'Examiner Code',
+    'Examiner',
+  ])
+  const componentAdjusterCodeKey = findColumnKey(normalized, [
+    'Claim Component Adjuster Code',
+    'Component Adjuster Code',
+    'Component Adjuster',
+  ])
+
+  const examinerCode = examinerCodeKey ? String(normalized[examinerCodeKey] ?? '').trim() : ''
+  const componentAdjusterCode = componentAdjusterCodeKey
+    ? String(normalized[componentAdjusterCodeKey] ?? '').trim()
+    : ''
+
+  const shouldUseExaminerCode = examinerCode.length > 0 && examinerCode !== '~'
+  normalized['Adjuster'] = shouldUseExaminerCode ? examinerCode : componentAdjusterCode
 
   return normalized
 }

@@ -15,7 +15,7 @@ interface LeftPanelProps {
 const FILTER_FIELDS = [
   {
     name: 'Adjuster Code',
-    sourceColumns: ['Claim Component Adjuster Code'],
+    sourceColumns: ['Adjuster'],
   },
   { name: 'Peril Description', sourceColumns: ['Peril Description'] },
   { name: 'Loss Cause', sourceColumns: ['Cause of Loss'] },
@@ -36,8 +36,16 @@ export default function LeftPanel({
   filters,
   onFilterChange,
 }: LeftPanelProps) {
-  const [isCollapsed, setIsCollapsed] = useState(false)
-  const [collapsedSections, setCollapsedSections] = useState<{ [key: string]: boolean }>({})
+  const [isCollapsed, setIsCollapsed] = useState(true)
+  const [collapsedSections, setCollapsedSections] = useState<{ [key: string]: boolean }>(() =>
+    FILTER_FIELDS.reduce(
+      (acc, field) => ({
+        ...acc,
+        [field.name]: true,
+      }),
+      {}
+    )
+  )
 
   const resolveColumnName = (candidateColumns: string[]): string => {
     const availableColumns = data.length > 0 ? Object.keys(data[0]) : []

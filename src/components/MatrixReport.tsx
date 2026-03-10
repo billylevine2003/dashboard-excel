@@ -16,6 +16,7 @@ type MatrixDrilldownTarget =
 
 interface MatrixRow {
   adjuster: string
+  openTotalCount: number
   openWithoutPayCount: number
   closedWithoutPayCount: number
   openWithPayCount: number
@@ -141,8 +142,13 @@ const findDefaultColumn = (columns: string[], options: string[]): string => {
 export default function MatrixReport({ data, drilldownTarget, onClearDrilldown }: MatrixReportProps) {
   const columns = useMemo(() => (data.length > 0 ? Object.keys(data[0]) : []), [data])
 
+  const adjusterColumnCandidates = useMemo(
+    () => ['adjuster', 'examiner code', 'claim component adjuster code', 'component adjuster'],
+    []
+  )
+
   const [adjusterColumn, setAdjusterColumn] = useState<string>(() =>
-    findDefaultColumn(columns, ['claim component adjuster code', 'component adjuster', 'adjuster'])
+    findDefaultColumn(columns, adjusterColumnCandidates)
   )
   const statusColumn = useMemo(
     () => findDefaultColumn(columns, ['claim status', 'status']),
@@ -171,11 +177,9 @@ export default function MatrixReport({ data, drilldownTarget, onClearDrilldown }
 
   useEffect(() => {
     if (!columns.includes(adjusterColumn)) {
-      setAdjusterColumn(
-        findDefaultColumn(columns, ['claim component adjuster code', 'component adjuster', 'adjuster'])
-      )
+      setAdjusterColumn(findDefaultColumn(columns, adjusterColumnCandidates))
     }
-  }, [columns, adjusterColumn])
+  }, [columns, adjusterColumn, adjusterColumnCandidates])
 
   const matrixRows = useMemo<MatrixRow[]>(() => {
     if (!adjusterColumn || !statusColumn) {
@@ -202,6 +206,7 @@ export default function MatrixReport({ data, drilldownTarget, onClearDrilldown }
       if (!grouped.has(adjuster)) {
         grouped.set(adjuster, {
           adjuster,
+          openTotalCount: 0,
           openWithoutPayCount: 0,
           closedWithoutPayCount: 0,
           openWithPayCount: 0,
@@ -258,6 +263,7 @@ export default function MatrixReport({ data, drilldownTarget, onClearDrilldown }
       if (statusBucket === 'open' && paidAmount <= 0 && !openWithoutPaySeen.has(rowKey)) {
         openWithoutPaySeen.add(rowKey)
         existing.openWithoutPayCount += 1
+        existing.openTotalCount += 1
       }
 
       if (statusBucket === 'closed' && paidAmount <= 0 && !closedWithoutPaySeen.has(rowKey)) {
@@ -274,6 +280,7 @@ export default function MatrixReport({ data, drilldownTarget, onClearDrilldown }
       if (statusBucket === 'open' && paidAmount > 0 && !openWithPaySeen.has(rowKey)) {
         openWithPaySeen.add(rowKey)
         existing.openWithPayCount += 1
+        existing.openTotalCount += 1
         existing.openWithPayPaidItd += paidAmount
         existing.openWithPayReserveOutstanding += reserveOutstandingColumn
           ? parseNumber(row[reserveOutstandingColumn])
@@ -297,7 +304,13 @@ export default function MatrixReport({ data, drilldownTarget, onClearDrilldown }
       }
     })
 
-    return Array.from(grouped.values()).sort((a, b) => a.adjuster.localeCompare(b.adjuster))
+    return Array.from(grouped.values()).sort((a, b) => {
+      const countDiff = b.openTotalCount - a.openTotalCount
+      if (countDiff !== 0) {
+        return countDiff
+      }
+      return a.adjuster.localeCompare(b.adjuster)
+    })
   }, [
     data,
     adjusterColumn,
@@ -340,6 +353,7 @@ export default function MatrixReport({ data, drilldownTarget, onClearDrilldown }
   const matrixTotals = useMemo(() =>
     drilledRows.reduce(
       (totals, row) => ({
+        openTotalCount: totals.openTotalCount + row.openTotalCount,
         openWithoutPayCount: totals.openWithoutPayCount + row.openWithoutPayCount,
         closedWithoutPayCount: totals.closedWithoutPayCount + row.closedWithoutPayCount,
         openWithPayCount: totals.openWithPayCount + row.openWithPayCount,
@@ -354,6 +368,7 @@ export default function MatrixReport({ data, drilldownTarget, onClearDrilldown }
         openAgeCount: totals.openAgeCount + row.openAgeCount,
       }),
       {
+        openTotalCount: 0,
         openWithoutPayCount: 0,
         closedWithoutPayCount: 0,
         openWithPayCount: 0,
@@ -432,10 +447,11 @@ export default function MatrixReport({ data, drilldownTarget, onClearDrilldown }
             <thead>
               <tr>
                 <th rowSpan={2}>Adjuster</th>
-                <th className="matrix-group-open" colSpan={5}>Open</th>
-                <th className="matrix-group-closed" colSpan={4}>Closed</th>
+                <th className="matrix-group-open" colSpan={6}>Open</th>
+                <th className="matrix-group-closed" colSpan={3}>Closed</th>
               </tr>
               <tr>
+                <th className="matrix-col-open-total-count">Total Count</th>
                 <th className="matrix-col-open-count">Count Paid</th>
                 <th className="matrix-col-open-count-without-pay">Count Without Pay</th>
                 <th className="matrix-col-open-paid">Paid</th>
@@ -444,13 +460,13 @@ export default function MatrixReport({ data, drilldownTarget, onClearDrilldown }
                 <th className="matrix-col-closed-count">Count Paid</th>
                 <th className="matrix-col-closed-count-without-pay">Count Without Pay</th>
                 <th className="matrix-col-closed-paid">Paid</th>
-                <th className="matrix-col-closed-reserve">Reserves</th>
               </tr>
             </thead>
             <tbody>
               {drilledRows.map((row) => (
                 <tr key={row.adjuster}>
                   <td>{row.adjuster}</td>
+                  <td className={`number matrix-col-open-total-count ${drilldownTarget === 'open-claims' ? 'matrix-focus-cell' : ''}`}>{row.openTotalCount}</td>
                   <td className={`number matrix-col-open-count ${drilldownTarget === 'open-claims' || drilldownTarget === 'open-with-pay-paid' ? 'matrix-focus-cell' : ''}`}>{row.openWithPayCount}</td>
                   <td className={`number matrix-col-open-count-without-pay ${drilldownTarget === 'open-without-pay' || drilldownTarget === 'without-pay-all' ? 'matrix-focus-cell' : ''}`}>{row.openWithoutPayCount}</td>
                   <td className={`number matrix-col-open-paid ${drilldownTarget === 'open-with-pay-paid' ? 'matrix-focus-cell' : ''}`}>{formatCurrency(row.openWithPayPaidItd)}</td>
@@ -461,13 +477,13 @@ export default function MatrixReport({ data, drilldownTarget, onClearDrilldown }
                   <td className="number matrix-col-closed-count">{row.closedWithPayCount}</td>
                   <td className={`number matrix-col-closed-count-without-pay ${drilldownTarget === 'closed-without-pay' || drilldownTarget === 'without-pay-all' ? 'matrix-focus-cell' : ''}`}>{row.closedWithoutPayCount}</td>
                   <td className="number matrix-col-closed-paid">{formatCurrency(row.closedWithPayPaidItd)}</td>
-                  <td className="number matrix-col-closed-reserve">{formatCurrency(row.closedReserveOutstanding)}</td>
                 </tr>
               ))}
             </tbody>
             <tfoot>
               <tr className="matrix-total-row">
                 <td>Total</td>
+                <td className="number matrix-col-open-total-count">{matrixTotals.openTotalCount}</td>
                 <td className="number matrix-col-open-count">{matrixTotals.openWithPayCount}</td>
                 <td className="number matrix-col-open-count-without-pay">{matrixTotals.openWithoutPayCount}</td>
                 <td className="number matrix-col-open-paid">{formatCurrency(matrixTotals.openWithPayPaidItd)}</td>
@@ -480,7 +496,6 @@ export default function MatrixReport({ data, drilldownTarget, onClearDrilldown }
                 <td className="number matrix-col-closed-count">{matrixTotals.closedWithPayCount}</td>
                 <td className="number matrix-col-closed-count-without-pay">{matrixTotals.closedWithoutPayCount}</td>
                 <td className="number matrix-col-closed-paid">{formatCurrency(matrixTotals.closedWithPayPaidItd)}</td>
-                <td className="number matrix-col-closed-reserve">{formatCurrency(matrixTotals.closedReserveOutstanding)}</td>
               </tr>
             </tfoot>
           </table>
