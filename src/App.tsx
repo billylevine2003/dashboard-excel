@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import * as XLSX from 'xlsx'
 import DataTable from './components/DataTable'
 import PivotTable from './components/PivotTable'
@@ -8,6 +8,8 @@ import FileUpload from './components/FileUpload'
 import FilterSearch from './components/FilterSearch'
 import LeftPanel from './components/LeftPanel'
 import KeyMetrics from './components/KeyMetrics'
+import AdjusterSummary from './components/AdjusterSummary'
+import LiabilityStandalonePanel from './components/LiabilityStandalonePanel'
 import './App.css'
 
 interface ExcelData {
@@ -29,6 +31,17 @@ type MatrixDrilldownTarget =
 
 const isDateLikeField = (fieldName: string): boolean =>
   fieldName.trim().toLowerCase().includes('date')
+
+const normalizeFieldName = (fieldName: string): string => fieldName.trim().toLowerCase()
+
+const isAdjusterFieldName = (fieldName: string): boolean => {
+  const normalized = normalizeFieldName(fieldName)
+  return (
+    normalized === 'adjuster' ||
+    normalized.includes('adjuster') ||
+    normalized.includes('examiner')
+  )
+}
 
 const formatExcelDateValue = (value: unknown): unknown => {
   if (typeof value !== 'number' || !Number.isFinite(value)) {
@@ -193,7 +206,13 @@ const normalizeDateFieldsInRow = (row: Record<string, unknown>): Record<string, 
 }
 
 function App() {
+  const isAiSummaryEnabled = Boolean(import.meta.env.VITE_OPENAI_API_KEY)
+  const [isAiInfoOpen, setIsAiInfoOpen] = useState(false)
+  const [showAdjusterSummary, setShowAdjusterSummary] = useState(true)
+  const aiStatusRef = useRef<HTMLDivElement | null>(null)
   const [data, setData] = useState<ExcelData | null>(null)
+  const [liabilityData, setLiabilityData] = useState<any[]>([])
+  const [liabilityFileName, setLiabilityFileName] = useState<string>('')
   const [sheetNames, setSheetNames] = useState<string[]>([])
   const [activeSheet, setActiveSheet] = useState<string>('')
   const [filteredData, setFilteredData] = useState<any[] | null>(null)
@@ -209,6 +228,56 @@ function App() {
   const [matrixDrilldownTarget, setMatrixDrilldownTarget] = useState<MatrixDrilldownTarget | null>(null)
   const matrixSectionRef = useRef<HTMLDivElement | null>(null)
 
+  const filterRows = (
+    sheetData: any[],
+    nextSearchTerm: string,
+    nextSearchColumn?: string,
+    nextPanelFilters?: PanelFiltersState,
+    ignoredFilterFields: string[] = []
+  ) => {
+    let filtered = [...sheetData]
+    const ignored = new Set(ignoredFilterFields)
+
+    if (nextPanelFilters && Object.keys(nextPanelFilters.selectedValues).length > 0) {
+      Object.entries(nextPanelFilters.selectedValues).forEach(([fieldName, selectedValues]: any) => {
+        if (ignored.has(fieldName)) {
+          return
+        }
+
+        if (selectedValues.length > 0) {
+          filtered = filtered.filter((row) =>
+            selectedValues.includes(String(row[fieldName]))
+          )
+        }
+      })
+    }
+
+    if (nextPanelFilters) {
+      const { start, end } = nextPanelFilters.claimReportedDateRange
+      if (start && end) {
+        filtered = filtered.filter((row) => {
+          const rowDate = String(row['Claim Reported Date'] ?? '')
+          return rowDate >= start && rowDate <= end
+        })
+      }
+    }
+
+    if (nextSearchTerm) {
+      filtered = filtered.filter((row) => {
+        if (nextSearchColumn) {
+          return String(row[nextSearchColumn])
+            .toLowerCase()
+            .includes(nextSearchTerm.toLowerCase())
+        }
+        return Object.values(row).some((value) =>
+          String(value).toLowerCase().includes(nextSearchTerm.toLowerCase())
+        )
+      })
+    }
+
+    return filtered
+  }
+
   useEffect(() => {
     if (viewMode !== 'matrix' || !matrixDrilldownTarget) {
       return
@@ -216,6 +285,27 @@ function App() {
 
     matrixSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }, [viewMode, matrixDrilldownTarget])
+
+  useEffect(() => {
+    if (!isAiInfoOpen) {
+      return
+    }
+
+    const handlePointerDown = (event: MouseEvent) => {
+      if (!aiStatusRef.current) {
+        return
+      }
+
+      if (!aiStatusRef.current.contains(event.target as Node)) {
+        setIsAiInfoOpen(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handlePointerDown)
+    return () => {
+      document.removeEventListener('mousedown', handlePointerDown)
+    }
+  }, [isAiInfoOpen])
 
   const handleFileUpload = (file: File) => {
     const reader = new FileReader()
@@ -241,6 +331,35 @@ function App() {
     reader.readAsBinaryString(file)
   }
 
+  const handleLiabilityFileUpload = (file: File) => {
+    const reader = new FileReader()
+
+    reader.onload = (e) => {
+      try {
+        const result = e.target?.result
+        if (!result) {
+          throw new Error('Unable to read file data')
+        }
+
+        const workbook = XLSX.read(result, { type: 'binary' })
+        const combinedRows = workbook.SheetNames.flatMap((sheetName) => {
+          const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], {
+            defval: '',
+          }) as Record<string, unknown>[]
+
+          return rows.map((row) => normalizeDateFieldsInRow(row))
+        })
+
+        setLiabilityData(combinedRows)
+        setLiabilityFileName(file.name)
+      } catch (error) {
+        alert('Error reading liability file: ' + (error as Error).message)
+      }
+    }
+
+    reader.readAsBinaryString(file)
+  }
+
   const handleFilter = (term: string, column?: string) => {
     if (!data || !activeSheet) return
     setSearchTerm(term)
@@ -260,45 +379,7 @@ function App() {
     searchColumn?: string,
     panelFilters?: PanelFiltersState
   ) => {
-    let filtered = [...sheetData]
-
-    // Apply left panel filters
-    if (panelFilters && Object.keys(panelFilters.selectedValues).length > 0) {
-      Object.entries(panelFilters.selectedValues).forEach(([fieldName, selectedValues]: any) => {
-        if (selectedValues.length > 0) {
-          filtered = filtered.filter((row) =>
-            selectedValues.includes(String(row[fieldName]))
-          )
-        }
-      })
-    }
-
-    // Apply claim reported date range filter from left panel
-    if (panelFilters) {
-      const { start, end } = panelFilters.claimReportedDateRange
-      if (start && end) {
-        filtered = filtered.filter((row) => {
-          const rowDate = String(row['Claim Reported Date'] ?? '')
-          return rowDate >= start && rowDate <= end
-        })
-      }
-    }
-
-    // Apply search filter
-    if (searchTerm) {
-      filtered = filtered.filter((row) => {
-        if (searchColumn) {
-          return String(row[searchColumn])
-            .toLowerCase()
-            .includes(searchTerm.toLowerCase())
-        }
-        return Object.values(row).some((value) =>
-          String(value).toLowerCase().includes(searchTerm.toLowerCase())
-        )
-      })
-    }
-
-    setFilteredData(filtered)
+    setFilteredData(filterRows(sheetData, searchTerm, searchColumn, panelFilters))
   }
 
   const handleExport = () => {
@@ -317,11 +398,56 @@ function App() {
 
   const currentData = activeSheet && data ? data[activeSheet] : null
 
+  const selectedAdjusters = useMemo(() => {
+    const adjusterValues = Object.entries(panelFilters.selectedValues)
+      .filter(([fieldName]) => isAdjusterFieldName(fieldName))
+      .flatMap(([, values]) => values)
+      .map((value) => String(value).trim())
+      .filter((value) => value.length > 0)
+
+    return Array.from(new Set(adjusterValues))
+  }, [panelFilters.selectedValues])
+
+  const peerComparisonData = useMemo(() => {
+    if (!currentData) {
+      return [] as any[]
+    }
+
+    const ignoredFields = Object.keys(panelFilters.selectedValues).filter((fieldName) =>
+      isAdjusterFieldName(fieldName)
+    )
+
+    return filterRows(
+      currentData,
+      searchTerm,
+      searchColumn || undefined,
+      panelFilters,
+      ignoredFields
+    )
+  }, [currentData, panelFilters, searchTerm, searchColumn])
+
   return (
     <div className="app">
       <header className="header">
         <h1>📊 Claims 101</h1>
         <p>Upload, analyze, and visualize your Excel data</p>
+        <div ref={aiStatusRef}>
+          <button
+            type="button"
+            className={`ai-status-badge ${isAiSummaryEnabled ? 'enabled' : 'disabled'}`}
+            onClick={() => setIsAiInfoOpen((prev) => !prev)}
+            aria-expanded={isAiInfoOpen}
+            aria-controls="ai-summary-config-help"
+          >
+            AI Summary: {isAiSummaryEnabled ? 'Enabled' : 'Disabled'}
+          </button>
+          {isAiInfoOpen && (
+            <div id="ai-summary-config-help" className="ai-status-tooltip" role="status">
+              <p>Set VITE_OPENAI_API_KEY to enable live AI summaries.</p>
+              <p>Optional: VITE_OPENAI_MODEL and VITE_OPENAI_API_URL.</p>
+            </div>
+          )}
+        </div>
       </header>
 
       <main className="container">
@@ -393,6 +519,25 @@ function App() {
                     onDrillDown={handleMetricDrilldown}
                   />
 
+                  <div className="adjuster-summary-toggle-row">
+                    <button
+                      type="button"
+                      className="adjuster-summary-toggle"
+                      onClick={() => setShowAdjusterSummary((prev) => !prev)}
+                      aria-expanded={showAdjusterSummary}
+                    >
+                      {showAdjusterSummary ? 'Hide Adjuster Summary' : 'Show Adjuster Summary'}
+                    </button>
+                  </div>
+
+                  {showAdjusterSummary && (
+                    <AdjusterSummary
+                      data={filteredData || currentData}
+                      peerData={peerComparisonData}
+                      selectedAdjusters={selectedAdjusters}
+                    />
+                  )}
+
                   <div className="view-toggle">
                     <button
                       className={`toggle-btn ${viewMode === 'charts' ? 'active' : ''}`}
@@ -462,6 +607,12 @@ function App() {
             </div>
           </div>
         )}
+
+        <LiabilityStandalonePanel
+          data={liabilityData}
+          fileName={liabilityFileName}
+          onUpload={handleLiabilityFileUpload}
+        />
       </main>
     </div>
   )
