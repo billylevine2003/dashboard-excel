@@ -9,6 +9,48 @@ interface LiabilityStandalonePanelProps {
 type LiabilitySegment = 'collision' | 'pd' | 'other'
 
 const normalize = (value: unknown): string => String(value ?? '').trim().toLowerCase()
+const normalizeForMatch = (value: unknown): string =>
+  normalize(value).replace(/[^a-z0-9]+/g, ' ').replace(/\s+/g, ' ').trim()
+
+const CLOSABILITY_KEYWORDS = [
+  {
+    label: 'Monitor - No Appraisal on File',
+    patterns: ['monitor no appraisal on file', 'no appraisal on file'],
+  },
+  {
+    label: 'Monitor - Pending Docs',
+    patterns: [
+      'monitor pending docs',
+      'monitor pending documents',
+      'pending docs',
+      'pending documents',
+      'pending documentation',
+      'awaiting docs',
+      'awaiting documents',
+    ],
+  },
+  {
+    label: 'Settle Recommendation',
+    patterns: [
+      'settle',
+      'settlement',
+      'recommend settle',
+      'recommended settlement',
+      'settle claim',
+    ],
+  },
+  {
+    label: 'Close Recommendation',
+    patterns: [
+      'close claim',
+      'close file',
+      'ready to close',
+      'recommend close',
+      'recommended close',
+      'closure recommended',
+    ],
+  },
+]
 
 const findColumn = (columns: string[], candidates: string[]): string | null => {
   const normalizedCandidates = candidates.map((candidate) => normalize(candidate))
@@ -138,17 +180,33 @@ export default function LiabilityStandalonePanel({ data, fileName, onUpload }: L
     'Open Closed Status',
   ])
   const paidColumn = findItdDirectPaidColumn(columns)
+  const recommendationColumn = findColumn(columns, [
+    'Closability Recommendation',
+    'Closeability Recommendation',
+    'Liability Closability Recommendation',
+    'Liability Closeability Recommendation',
+    'Closure Recommendation',
+    'Recommendation',
+    'Closability',
+    'Closeability',
+  ])
   const perilColumns = columns.filter((column) => normalize(column).includes('peril'))
   const visibleColumns = data.length > 0 ? Object.keys(data[0]) : []
 
   let collisionOpenNoPay = 0
   let pdOpenNoPay = 0
+  const closabilityKeywordCounts = CLOSABILITY_KEYWORDS.map((keyword) => ({
+    label: keyword.label,
+    count: 0,
+  }))
+  let closabilityOtherCount = 0
 
   data.forEach((row) => {
     const typedRow = row as Record<string, unknown>
     const isOpen = isOpenStatus(statusColumn ? typedRow[statusColumn] : '')
     const paid = paidColumn ? parseNumberStrict(typedRow[paidColumn]) : null
     const segment = getSegmentFromRow(typedRow, perilColumns)
+    const recommendationText = recommendationColumn ? normalizeForMatch(typedRow[recommendationColumn]) : ''
 
     if (isOpen && paid === 0 && segment === 'collision') {
       collisionOpenNoPay += 1
@@ -157,7 +215,21 @@ export default function LiabilityStandalonePanel({ data, fileName, onUpload }: L
     if (isOpen && paid === 0 && segment === 'pd') {
       pdOpenNoPay += 1
     }
+
+    if (recommendationText) {
+      const keywordMatchIndex = CLOSABILITY_KEYWORDS.findIndex((keyword) =>
+        keyword.patterns.some((pattern) => recommendationText.includes(pattern))
+      )
+
+      if (keywordMatchIndex >= 0) {
+        closabilityKeywordCounts[keywordMatchIndex].count += 1
+      } else {
+        closabilityOtherCount += 1
+      }
+    }
   })
+
+  const sortedClosabilitySummary = [...closabilityKeywordCounts].sort((a, b) => b.count - a.count)
 
   const handleUploadChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
@@ -185,7 +257,7 @@ export default function LiabilityStandalonePanel({ data, fileName, onUpload }: L
       </p>
 
       <p className="table-note">
-        Mapped Columns: Status={statusColumn || 'Not Found'} | ITD Direct Pay={paidColumn || 'Not Found'} | Peril={perilColumns.join(', ') || 'Not Found'}
+        Mapped Columns: Status={statusColumn || 'Not Found'} | ITD Direct Pay={paidColumn || 'Not Found'} | Peril={perilColumns.join(', ') || 'Not Found'} | Closability Recommendation={recommendationColumn || 'Not Found'}
       </p>
 
       <div className="kpi-grid kpi-grid-money" style={{ marginTop: 10 }}>
@@ -198,6 +270,29 @@ export default function LiabilityStandalonePanel({ data, fileName, onUpload }: L
           <p className="kpi-value">{formatInteger(pdOpenNoPay)}</p>
         </article>
       </div>
+
+      {recommendationColumn && (
+        <>
+          <h3 style={{ margin: '16px 0 8px' }}>Closability Recommendation Summary</h3>
+          <div className="kpi-grid kpi-grid-money" style={{ marginTop: 10 }}>
+            {sortedClosabilitySummary.map((keyword, index) => (
+              <article key={keyword.label} className="kpi-card kpi-card-claim-count">
+                {index === 0 && keyword.count > 0 && (
+                  <p className="table-note" style={{ marginTop: 0, marginBottom: 6, fontWeight: 700 }}>
+                    Top recommendation
+                  </p>
+                )}
+                <p className="kpi-label">{keyword.label}</p>
+                <p className="kpi-value">{formatInteger(keyword.count)}</p>
+              </article>
+            ))}
+            <article className="kpi-card kpi-card-claim-count">
+              <p className="kpi-label">Other Recommendation Text</p>
+              <p className="kpi-value">{formatInteger(closabilityOtherCount)}</p>
+            </article>
+          </div>
+        </>
+      )}
 
       {data.length > 0 && (
         <DataTable
