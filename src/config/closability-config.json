@@ -1,0 +1,51 @@
+{
+  "recommendationColumnCandidates": [
+    "Closability Recommendation",
+    "Closeability Recommendation",
+    "Liability Closability Recommendation",
+    "Liability Closeability Recommendation",
+    "Closure Recommendation",
+    "Recommendation",
+    "Closability",
+    "Closeability"
+  ],
+  "keywordGroups": [
+    {
+      "label": "Monitor - No Appraisal on File",
+      "patterns": ["monitor no appraisal on file", "no appraisal on file"]
+    },
+    {
+      "label": "Monitor - Pending Docs",
+      "patterns": [
+        "monitor pending docs",
+        "monitor pending documents",
+        "pending docs",
+        "pending documents",
+        "pending documentation",
+        "awaiting docs",
+        "awaiting documents"
+      ]
+    },
+    {
+      "label": "Settle Recommendation",
+      "patterns": [
+        "settle",
+        "settlement",
+        "recommend settle",
+        "recommended settlement",
+        "settle claim"
+      ]
+    },
+    {
+      "label": "Close Recommendation",
+      "patterns": [
+        "close claim",
+        "close file",
+        "ready to close",
+        "recommend close",
+        "recommended close",
+        "closure recommended"
+      ]
+    }
+  ]
+}

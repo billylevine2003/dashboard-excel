@@ -1,4 +1,5 @@
 import DataTable from './DataTable'
+import closabilityConfig from '../config/closability-config.json'
 
 interface LiabilityStandalonePanelProps {
   data: any[]
@@ -12,45 +13,8 @@ const normalize = (value: unknown): string => String(value ?? '').trim().toLower
 const normalizeForMatch = (value: unknown): string =>
   normalize(value).replace(/[^a-z0-9]+/g, ' ').replace(/\s+/g, ' ').trim()
 
-const CLOSABILITY_KEYWORDS = [
-  {
-    label: 'Monitor - No Appraisal on File',
-    patterns: ['monitor no appraisal on file', 'no appraisal on file'],
-  },
-  {
-    label: 'Monitor - Pending Docs',
-    patterns: [
-      'monitor pending docs',
-      'monitor pending documents',
-      'pending docs',
-      'pending documents',
-      'pending documentation',
-      'awaiting docs',
-      'awaiting documents',
-    ],
-  },
-  {
-    label: 'Settle Recommendation',
-    patterns: [
-      'settle',
-      'settlement',
-      'recommend settle',
-      'recommended settlement',
-      'settle claim',
-    ],
-  },
-  {
-    label: 'Close Recommendation',
-    patterns: [
-      'close claim',
-      'close file',
-      'ready to close',
-      'recommend close',
-      'recommended close',
-      'closure recommended',
-    ],
-  },
-]
+const RECOMMENDATION_COLUMN_CANDIDATES = closabilityConfig.recommendationColumnCandidates
+const CLOSABILITY_KEYWORDS = closabilityConfig.keywordGroups
 
 const findColumn = (columns: string[], candidates: string[]): string | null => {
   const normalizedCandidates = candidates.map((candidate) => normalize(candidate))
@@ -180,16 +144,7 @@ export default function LiabilityStandalonePanel({ data, fileName, onUpload }: L
     'Open Closed Status',
   ])
   const paidColumn = findItdDirectPaidColumn(columns)
-  const recommendationColumn = findColumn(columns, [
-    'Closability Recommendation',
-    'Closeability Recommendation',
-    'Liability Closability Recommendation',
-    'Liability Closeability Recommendation',
-    'Closure Recommendation',
-    'Recommendation',
-    'Closability',
-    'Closeability',
-  ])
+  const recommendationColumn = findColumn(columns, RECOMMENDATION_COLUMN_CANDIDATES)
   const perilColumns = columns.filter((column) => normalize(column).includes('peril'))
   const visibleColumns = data.length > 0 ? Object.keys(data[0]) : []
 
