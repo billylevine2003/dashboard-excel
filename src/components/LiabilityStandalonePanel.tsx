@@ -3,8 +3,6 @@ import closabilityConfig from '../config/closability-config.json'
 
 interface LiabilityStandalonePanelProps {
   data: any[]
-  fileName?: string
-  onUpload: (file: File) => void
 }
 
 type LiabilitySegment = 'collision' | 'pd' | 'other'
@@ -134,7 +132,7 @@ const getSegmentFromRow = (row: Record<string, unknown>, perilColumns: string[])
 const formatInteger = (value: number): string =>
   new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(value)
 
-export default function LiabilityStandalonePanel({ data, fileName, onUpload }: LiabilityStandalonePanelProps) {
+export default function LiabilityStandalonePanel({ data }: LiabilityStandalonePanelProps) {
   const columns = data.length > 0 ? Object.keys(data[0]) : []
   const statusColumn = findColumn(columns, [
     'Liability Status',
@@ -186,30 +184,9 @@ export default function LiabilityStandalonePanel({ data, fileName, onUpload }: L
 
   const sortedClosabilitySummary = [...closabilityKeywordCounts].sort((a, b) => b.count - a.count)
 
-  const handleUploadChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    if (file) {
-      onUpload(file)
-    }
-  }
-
   return (
     <section className="table-container" style={{ marginTop: 20 }}>
       <h2>Standalone Liability Sheet</h2>
-      <label htmlFor="liability-standalone-upload" className="upload-label">
-        ⚖️ Upload Liability Sheet
-      </label>
-      <input
-        id="liability-standalone-upload"
-        type="file"
-        accept=".xlsx,.xls,.csv"
-        onChange={handleUploadChange}
-        className="file-input"
-      />
-
-      <p className="table-note" style={{ marginTop: 10 }}>
-        {fileName ? `Loaded: ${fileName}` : 'No liability file selected'}
-      </p>
 
       <p className="table-note">
         Mapped Columns: Status={statusColumn || 'Not Found'} | ITD Direct Pay={paidColumn || 'Not Found'} | Peril={perilColumns.join(', ') || 'Not Found'} | Closability Recommendation={recommendationColumn || 'Not Found'}

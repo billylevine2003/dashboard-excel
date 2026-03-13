@@ -286,6 +286,10 @@ export default function KeyMetrics({ data, onDrillDown }: KeyMetricsProps) {
 
       {!collapsed && (
         <>
+          <p className="kpi-description">
+            High-level claim performance snapshot across open, closed, and total outcomes.
+          </p>
+
           <h3 className="kpi-row-title">Open</h3>
           <div className="kpi-grid kpi-grid-money">
             <article className="kpi-card kpi-card-claim-count kpi-card-clickable" {...getDrilldownProps('open-claims')}>

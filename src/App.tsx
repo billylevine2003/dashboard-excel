@@ -208,9 +208,9 @@ const normalizeDateFieldsInRow = (row: Record<string, unknown>): Record<string, 
 function App() {
   const isAiSummaryEnabled = Boolean(import.meta.env.VITE_OPENAI_API_KEY)
   const [isAiInfoOpen, setIsAiInfoOpen] = useState(false)
-  const [showAdjusterSummary, setShowAdjusterSummary] = useState(true)
   const aiStatusRef = useRef<HTMLDivElement | null>(null)
   const [data, setData] = useState<ExcelData | null>(null)
+  const [mainFileName, setMainFileName] = useState<string>('')
   const [liabilityData, setLiabilityData] = useState<any[]>([])
   const [liabilityFileName, setLiabilityFileName] = useState<string>('')
   const [sheetNames, setSheetNames] = useState<string[]>([])
@@ -220,6 +220,7 @@ function App() {
   const [searchTerm, setSearchTerm] = useState<string>('')
   const [searchColumn, setSearchColumn] = useState<string>('')
   const [visibleColumns, setVisibleColumns] = useState<string[]>([])
+  const [isVisualizationCollapsed, setIsVisualizationCollapsed] = useState(false)
   const [panelFilters, setPanelFilters] = useState<PanelFiltersState>({
     selectedValues: {},
     claimReportedDateRange: { start: '', end: '' },
@@ -320,6 +321,7 @@ function App() {
         })
         
         setData(sheets)
+        setMainFileName(file.name)
         setSheetNames(workbook.SheetNames)
         setActiveSheet(workbook.SheetNames[0])
         setFilteredData(sheets[workbook.SheetNames[0]])
@@ -451,7 +453,12 @@ function App() {
       </header>
 
       <main className="container">
-        <FileUpload onFileUpload={handleFileUpload} />
+        <FileUpload
+          onFileUpload={handleFileUpload}
+          onLiabilityFileUpload={handleLiabilityFileUpload}
+          fileName={mainFileName}
+          liabilityFileName={liabilityFileName}
+        />
 
         {data && (
           <div className="main-content">
@@ -519,89 +526,97 @@ function App() {
                     onDrillDown={handleMetricDrilldown}
                   />
 
-                  <div className="adjuster-summary-toggle-row">
-                    <button
-                      type="button"
-                      className="adjuster-summary-toggle"
-                      onClick={() => setShowAdjusterSummary((prev) => !prev)}
-                      aria-expanded={showAdjusterSummary}
-                    >
-                      {showAdjusterSummary ? 'Hide Adjuster Summary' : 'Show Adjuster Summary'}
-                    </button>
-                  </div>
+                  <AdjusterSummary
+                    data={filteredData || currentData}
+                    peerData={peerComparisonData}
+                    selectedAdjusters={selectedAdjusters}
+                  />
 
-                  {showAdjusterSummary && (
-                    <AdjusterSummary
-                      data={filteredData || currentData}
-                      peerData={peerComparisonData}
-                      selectedAdjusters={selectedAdjusters}
-                    />
-                  )}
-
-                  <div className="view-toggle">
-                    <button
-                      className={`toggle-btn ${viewMode === 'charts' ? 'active' : ''}`}
-                      onClick={() => setViewMode('charts')}
-                    >
-                      📊 Charts
-                    </button>
-                    <button
-                      className={`toggle-btn ${viewMode === 'table' ? 'active' : ''}`}
-                      onClick={() => setViewMode('table')}
-                    >
-                      📋 Data Table
-                    </button>
-                    <button
-                      className={`toggle-btn ${viewMode === 'pivot' ? 'active' : ''}`}
-                      onClick={() => setViewMode('pivot')}
-                    >
-                      🔀 Pivot Table
-                    </button>
-                    <button
-                      className={`toggle-btn ${viewMode === 'matrix' ? 'active' : ''}`}
-                      onClick={() => setViewMode('matrix')}
-                    >
-                      🧮 Matrix Report
-                    </button>
-                  </div>
-
-                  {viewMode === 'charts' && (
-                    <div className="chart-section">
-                      <Charts
-                        data={filteredData || currentData}
-                        xAxisKey="Claim Reported Month-Year"
-                        numericKeys={['Direct Loss Paid ITD', 'Direct Loss Reserve Outstanding']}
-                      />
+                  <section className="visualization-section">
+                    <div className="kpi-header">
+                      <h2>Visualization</h2>
+                      <button
+                        type="button"
+                        className="kpi-toggle"
+                        onClick={() => setIsVisualizationCollapsed((prev) => !prev)}
+                      >
+                        {isVisualizationCollapsed ? 'Show' : 'Hide'}
+                      </button>
                     </div>
-                  )}
 
-                  {viewMode === 'table' && (
-                    <div className="table-section">
-                      <DataTable
-                        data={filteredData || currentData}
-                        visibleColumns={visibleColumns}
-                      />
-                    </div>
-                  )}
+                    {!isVisualizationCollapsed && (
+                      <>
+                        <p className="kpi-description">
+                          Explore claims data through charts, table views, pivot analysis, and matrix reporting.
+                        </p>
 
-                  {viewMode === 'pivot' && (
-                    <div className="table-section">
-                      <PivotTable
-                        data={filteredData || currentData}
-                        visibleColumns={visibleColumns}
-                      />
-                    </div>
-                  )}
+                        <div className="view-toggle">
+                          <button
+                            className={`toggle-btn ${viewMode === 'charts' ? 'active' : ''}`}
+                            onClick={() => setViewMode('charts')}
+                          >
+                            📊 Charts
+                          </button>
+                          <button
+                            className={`toggle-btn ${viewMode === 'table' ? 'active' : ''}`}
+                            onClick={() => setViewMode('table')}
+                          >
+                            📋 Data Table
+                          </button>
+                          <button
+                            className={`toggle-btn ${viewMode === 'pivot' ? 'active' : ''}`}
+                            onClick={() => setViewMode('pivot')}
+                          >
+                            🔀 Pivot Table
+                          </button>
+                          <button
+                            className={`toggle-btn ${viewMode === 'matrix' ? 'active' : ''}`}
+                            onClick={() => setViewMode('matrix')}
+                          >
+                            🧮 Matrix Report
+                          </button>
+                        </div>
 
-                  {viewMode === 'matrix' && (
-                    <div className="table-section" ref={matrixSectionRef}>
-                      <MatrixReport
-                        data={filteredData || currentData}
-                        drilldownTarget={matrixDrilldownTarget}
-                        onClearDrilldown={() => setMatrixDrilldownTarget(null)}
-                      />
-                    </div>
-                  )}
+                        {viewMode === 'charts' && (
+                          <div className="chart-section">
+                            <Charts
+                              data={filteredData || currentData}
+                              xAxisKey="Claim Reported Month-Year"
+                              numericKeys={['Direct Loss Paid ITD', 'Direct Loss Reserve Outstanding']}
+                            />
+                          </div>
+                        )}
+
+                        {viewMode === 'table' && (
+                          <div className="table-section">
+                            <DataTable
+                              data={filteredData || currentData}
+                              visibleColumns={visibleColumns}
+                            />
+                          </div>
+                        )}
+
+                        {viewMode === 'pivot' && (
+                          <div className="table-section">
+                            <PivotTable
+                              data={filteredData || currentData}
+                              visibleColumns={visibleColumns}
+                            />
+                          </div>
+                        )}
+
+                        {viewMode === 'matrix' && (
+                          <div className="table-section" ref={matrixSectionRef}>
+                            <MatrixReport
+                              data={filteredData || currentData}
+                              drilldownTarget={matrixDrilldownTarget}
+                              onClearDrilldown={() => setMatrixDrilldownTarget(null)}
+                            />
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </section>
                 </>
               )}
             </div>
@@ -610,8 +625,6 @@ function App() {
 
         <LiabilityStandalonePanel
           data={liabilityData}
-          fileName={liabilityFileName}
-          onUpload={handleLiabilityFileUpload}
         />
       </main>
     </div>

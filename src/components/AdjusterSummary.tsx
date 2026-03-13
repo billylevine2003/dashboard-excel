@@ -381,6 +381,7 @@ const fetchAiSummary = async (card: SummaryCard, peerCount: number): Promise<str
 }
 
 export default function AdjusterSummary({ data, peerData, selectedAdjusters }: AdjusterSummaryProps) {
+  const [collapsed, setCollapsed] = useState(false)
   const summary = useMemo(() => {
     if (!selectedAdjusters.length || !data.length) {
       return {
@@ -546,81 +547,95 @@ export default function AdjusterSummary({ data, peerData, selectedAdjusters }: A
   return (
     <section className="adjuster-summary" aria-live="polite">
       <div className="adjuster-summary-header">
-        <h2>Adjuster Summary</h2>
-        <p>
-          Dynamic commentary and peer comparison on similar filtered claims.
-        </p>
+        <div className="kpi-header">
+          <h2>Adjuster Summary</h2>
+          <button
+            type="button"
+            className="kpi-toggle"
+            onClick={() => setCollapsed((prev) => !prev)}
+          >
+            {collapsed ? 'Show' : 'Hide'}
+          </button>
+        </div>
       </div>
 
-      {selectedAdjusters.length === 0 && (
-        <p className="adjuster-summary-empty">
-          Select an adjuster in the left panel to generate this summary.
-        </p>
-      )}
-
-      {selectedAdjusters.length > 0 && summary.cards.length === 0 && (
-        <p className="adjuster-summary-empty">
-          No matching adjuster rows are available with the current filters.
-        </p>
-      )}
-
-      {summary.cards.length > 0 && (
+      {!collapsed && (
         <>
-          <p className="adjuster-summary-peer-note">
-            Comparison baseline: {formatCount(summary.peerCount)} peer adjusters with the same non-adjuster filters.
+          <p>
+            Dynamic commentary and peer comparison on similar filtered claims.
           </p>
 
-          {primaryCard && (
-            <div className="adjuster-ai-summary" aria-live="polite">
-              <h3>AI Summary: {primaryCard.metrics.adjuster}</h3>
-              <p className="adjuster-ai-summary-text">
-                {isAiLoading ? 'Generating AI summary…' : aiSummaryText}
-              </p>
-              {!isAiLoading && aiSummaryText && (
-                <p className="adjuster-ai-summary-meta">
-                  Source: {isFallbackSummary ? 'local fallback summary' : 'live AI summary'}
-                </p>
-              )}
-              {aiStatusMessage && <p className="adjuster-ai-summary-status">{aiStatusMessage}</p>}
-              {selectedAdjusters.length > 1 && (
-                <p className="adjuster-ai-summary-status">
-                  Multiple adjusters are selected. AI summary is shown for the first selected adjuster.
-                </p>
-              )}
-            </div>
+          {selectedAdjusters.length === 0 && (
+            <p className="adjuster-summary-empty">
+              Select an adjuster in the left panel to generate this summary.
+            </p>
           )}
 
-          <div className="adjuster-summary-grid">
-            {summary.cards.map(({ metrics, strengths, focusAreas }) => (
-              <article key={metrics.adjuster} className="adjuster-summary-card">
-                <h3>{metrics.adjuster}</h3>
+          {selectedAdjusters.length > 0 && summary.cards.length === 0 && (
+            <p className="adjuster-summary-empty">
+              No matching adjuster rows are available with the current filters.
+            </p>
+          )}
 
-                <div className="adjuster-summary-metrics">
-                  <span>Claims: {formatCount(metrics.claims)}</span>
-                  <span>Open: {formatCount(metrics.openClaims)}</span>
-                  <span>Closed: {formatCount(metrics.closedClaims)}</span>
-                  <span>Paid ITD: {formatCurrency(metrics.paidItd)}</span>
-                  <span>Reserve: {formatCurrency(metrics.reserveOutstanding)}</span>
+          {summary.cards.length > 0 && (
+            <>
+              <p className="adjuster-summary-peer-note">
+                Comparison baseline: {formatCount(summary.peerCount)} peer adjusters with the same non-adjuster filters.
+              </p>
+
+              {primaryCard && (
+                <div className="adjuster-ai-summary" aria-live="polite">
+                  <h3>AI Summary: {primaryCard.metrics.adjuster}</h3>
+                  <p className="adjuster-ai-summary-text">
+                    {isAiLoading ? 'Generating AI summary…' : aiSummaryText}
+                  </p>
+                  {!isAiLoading && aiSummaryText && (
+                    <p className="adjuster-ai-summary-meta">
+                      Source: {isFallbackSummary ? 'local fallback summary' : 'live AI summary'}
+                    </p>
+                  )}
+                  {aiStatusMessage && <p className="adjuster-ai-summary-status">{aiStatusMessage}</p>}
+                  {selectedAdjusters.length > 1 && (
+                    <p className="adjuster-ai-summary-status">
+                      Multiple adjusters are selected. AI summary is shown for the first selected adjuster.
+                    </p>
+                  )}
                 </div>
+              )}
 
-                <div className="adjuster-commentary">
-                  <h4>Positive Areas</h4>
-                  <ul>
-                    {strengths.map((line) => (
-                      <li key={line}>{line}</li>
-                    ))}
-                  </ul>
+              <div className="adjuster-summary-grid">
+                {summary.cards.map(({ metrics, strengths, focusAreas }) => (
+                  <article key={metrics.adjuster} className="adjuster-summary-card">
+                    <h3>{metrics.adjuster}</h3>
 
-                  <h4>Focus Areas</h4>
-                  <ul>
-                    {focusAreas.map((line) => (
-                      <li key={line}>{line}</li>
-                    ))}
-                  </ul>
-                </div>
-              </article>
-            ))}
-          </div>
+                    <div className="adjuster-summary-metrics">
+                      <span>Claims: {formatCount(metrics.claims)}</span>
+                      <span>Open: {formatCount(metrics.openClaims)}</span>
+                      <span>Closed: {formatCount(metrics.closedClaims)}</span>
+                      <span>Paid ITD: {formatCurrency(metrics.paidItd)}</span>
+                      <span>Reserve: {formatCurrency(metrics.reserveOutstanding)}</span>
+                    </div>
+
+                    <div className="adjuster-commentary">
+                      <h4>Positive Areas</h4>
+                      <ul>
+                        {strengths.map((line) => (
+                          <li key={line}>{line}</li>
+                        ))}
+                      </ul>
+
+                      <h4>Focus Areas</h4>
+                      <ul>
+                        {focusAreas.map((line) => (
+                          <li key={line}>{line}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </>
+          )}
         </>
       )}
     </section>

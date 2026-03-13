@@ -95,6 +95,39 @@
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
+.upload-section h2 {
+  margin: 0 0 14px;
+  color: #333;
+}
+
+.upload-sections {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.upload-subsection {
+  border: 1px solid #e5e7ef;
+  border-radius: 8px;
+  padding: 14px;
+}
+
+.upload-subsection h3 {
+  margin: 0 0 10px;
+  color: #333;
+  font-size: 1rem;
+}
+
+.upload-subsection-description {
+  margin: 0 0 10px;
+  color: #5f6780;
+  font-size: 0.92rem;
+}
+
+.upload-file-note {
+  margin: 10px 0 0;
+}
+
 .upload-label {
   display: block;
   font-size: 1.1rem;
@@ -113,6 +146,12 @@
 
 .file-input:hover {
   border-color: #667eea;
+}
+
+@media (max-width: 900px) {
+  .upload-sections {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* Sheet Tabs */
@@ -344,10 +383,22 @@
 }
 
 /* View Toggle */
+.visualization-section {
+  background: white;
+  border-radius: 8px;
+  padding: 20px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.visualization-section h2 {
+  margin: 0;
+  color: #333;
+}
+
 .view-toggle {
   display: flex;
   gap: 10px;
-  margin: 20px 0;
+  margin: 0 0 16px;
 }
 
 .toggle-btn {
@@ -711,6 +762,12 @@
 
 .kpi-toggle:hover {
   background: #e9eeff;
+}
+
+.kpi-description {
+  margin: 0 0 12px;
+  color: #5f6780;
+  font-size: 0.92rem;
 }
 
 .kpi-grid {
