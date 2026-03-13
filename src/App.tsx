@@ -617,15 +617,21 @@ function App() {
                       </>
                     )}
                   </section>
+
+                  <LiabilityStandalonePanel
+                    data={liabilityData}
+                  />
                 </>
               )}
             </div>
           </div>
         )}
 
-        <LiabilityStandalonePanel
-          data={liabilityData}
-        />
+        {!data && (
+          <LiabilityStandalonePanel
+            data={liabilityData}
+          />
+        )}
       </main>
     </div>
   )

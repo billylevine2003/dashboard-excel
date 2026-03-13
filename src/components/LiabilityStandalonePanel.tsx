@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import DataTable from './DataTable'
 import closabilityConfig from '../config/closability-config.json'
 
@@ -133,6 +134,7 @@ const formatInteger = (value: number): string =>
   new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(value)
 
 export default function LiabilityStandalonePanel({ data }: LiabilityStandalonePanelProps) {
+  const [collapsed, setCollapsed] = useState(false)
   const columns = data.length > 0 ? Object.keys(data[0]) : []
   const statusColumn = findColumn(columns, [
     'Liability Status',
@@ -185,52 +187,75 @@ export default function LiabilityStandalonePanel({ data }: LiabilityStandalonePa
   const sortedClosabilitySummary = [...closabilityKeywordCounts].sort((a, b) => b.count - a.count)
 
   return (
-    <section className="table-container" style={{ marginTop: 20 }}>
-      <h2>Standalone Liability Sheet</h2>
-
-      <p className="table-note">
-        Mapped Columns: Status={statusColumn || 'Not Found'} | ITD Direct Pay={paidColumn || 'Not Found'} | Peril={perilColumns.join(', ') || 'Not Found'} | Closability Recommendation={recommendationColumn || 'Not Found'}
-      </p>
-
-      <div className="kpi-grid kpi-grid-money" style={{ marginTop: 10 }}>
-        <article className="kpi-card kpi-card-claim-count">
-          <p className="kpi-label">COLL Open Without Pay</p>
-          <p className="kpi-value">{formatInteger(collisionOpenNoPay)}</p>
-        </article>
-        <article className="kpi-card kpi-card-claim-count">
-          <p className="kpi-label">PD Open Without Pay</p>
-          <p className="kpi-value">{formatInteger(pdOpenNoPay)}</p>
-        </article>
+    <section className="liability-analysis-section">
+      <div className="kpi-header">
+        <h2>Liability Analysis</h2>
+        <button
+          type="button"
+          className="kpi-toggle"
+          onClick={() => setCollapsed((prev) => !prev)}
+        >
+          {collapsed ? 'Show' : 'Hide'}
+        </button>
       </div>
 
-      {recommendationColumn && (
+      {!collapsed && (
         <>
-          <h3 style={{ margin: '16px 0 8px' }}>Closability Recommendation Summary</h3>
-          <div className="kpi-grid kpi-grid-money" style={{ marginTop: 10 }}>
-            {sortedClosabilitySummary.map((keyword, index) => (
-              <article key={keyword.label} className="kpi-card kpi-card-claim-count">
-                {index === 0 && keyword.count > 0 && (
-                  <p className="table-note" style={{ marginTop: 0, marginBottom: 6, fontWeight: 700 }}>
-                    Top recommendation
-                  </p>
-                )}
-                <p className="kpi-label">{keyword.label}</p>
-                <p className="kpi-value">{formatInteger(keyword.count)}</p>
-              </article>
-            ))}
-            <article className="kpi-card kpi-card-claim-count">
-              <p className="kpi-label">Other Recommendation Text</p>
-              <p className="kpi-value">{formatInteger(closabilityOtherCount)}</p>
-            </article>
-          </div>
-        </>
-      )}
+          <p className="kpi-description">
+            Standalone liability sheet analysis with open-without-pay and closability recommendation summary.
+          </p>
 
-      {data.length > 0 && (
-        <DataTable
-          data={data}
-          visibleColumns={visibleColumns}
-        />
+          {data.length === 0 && (
+            <p className="table-note liability-analysis-note">
+              Upload a liability sheet in Upload Panel → Liability Analysis to view results.
+            </p>
+          )}
+
+          {data.length > 0 && (
+            <>
+              <p className="table-note liability-analysis-note">
+                Mapped Columns: Status={statusColumn || 'Not Found'} | ITD Direct Pay={paidColumn || 'Not Found'} | Peril={perilColumns.join(', ') || 'Not Found'} | Closability Recommendation={recommendationColumn || 'Not Found'}
+              </p>
+
+              <div className="kpi-grid kpi-grid-money liability-analysis-grid">
+                <article className="kpi-card kpi-card-claim-count">
+                  <p className="kpi-label">COLL Open Without Pay</p>
+                  <p className="kpi-value">{formatInteger(collisionOpenNoPay)}</p>
+                </article>
+                <article className="kpi-card kpi-card-claim-count">
+                  <p className="kpi-label">PD Open Without Pay</p>
+                  <p className="kpi-value">{formatInteger(pdOpenNoPay)}</p>
+                </article>
+              </div>
+
+              {recommendationColumn && (
+                <>
+                  <h3 className="liability-analysis-subtitle">Closability Recommendation Summary</h3>
+                  <div className="kpi-grid kpi-grid-money liability-analysis-grid">
+                    {sortedClosabilitySummary.map((keyword, index) => (
+                      <article key={keyword.label} className="kpi-card kpi-card-claim-count">
+                        {index === 0 && keyword.count > 0 && (
+                          <p className="table-note liability-analysis-top-note">Top recommendation</p>
+                        )}
+                        <p className="kpi-label">{keyword.label}</p>
+                        <p className="kpi-value">{formatInteger(keyword.count)}</p>
+                      </article>
+                    ))}
+                    <article className="kpi-card kpi-card-claim-count">
+                      <p className="kpi-label">Other Recommendation Text</p>
+                      <p className="kpi-value">{formatInteger(closabilityOtherCount)}</p>
+                    </article>
+                  </div>
+                </>
+              )}
+
+              <DataTable
+                data={data}
+                visibleColumns={visibleColumns}
+              />
+            </>
+          )}
+        </>
       )}
     </section>
   )

@@ -51,9 +51,9 @@ export default function FileUpload({
         </section>
 
         <section className="upload-subsection">
-          <h3>Liability File</h3>
+          <h3>Liability Analysis</h3>
           <p className="upload-subsection-description">
-            Used for liability closability and open-without-pay summaries.
+            Uses the standalone liability sheet for analysis.
           </p>
           <label htmlFor="liability-upload" className="upload-label">
             ⚖️ Upload Liability Sheet
