@@ -213,6 +213,7 @@ function App() {
   const [mainFileName, setMainFileName] = useState<string>('')
   const [liabilityData, setLiabilityData] = useState<any[]>([])
   const [liabilityFileName, setLiabilityFileName] = useState<string>('')
+  const [liabilityUploadVersion, setLiabilityUploadVersion] = useState(0)
   const [sheetNames, setSheetNames] = useState<string[]>([])
   const [activeSheet, setActiveSheet] = useState<string>('')
   const [filteredData, setFilteredData] = useState<any[] | null>(null)
@@ -354,6 +355,7 @@ function App() {
 
         setLiabilityData(combinedRows)
         setLiabilityFileName(file.name)
+        setLiabilityUploadVersion((prev) => prev + 1)
       } catch (error) {
         alert('Error reading liability file: ' + (error as Error).message)
       }
@@ -618,18 +620,22 @@ function App() {
                     )}
                   </section>
 
-                  <LiabilityStandalonePanel
-                    data={liabilityData}
-                  />
+                  {liabilityData.length > 0 && (
+                    <LiabilityStandalonePanel
+                      data={liabilityData}
+                      uploadVersion={liabilityUploadVersion}
+                    />
+                  )}
                 </>
               )}
             </div>
           </div>
         )}
 
-        {!data && (
+        {!data && liabilityData.length > 0 && (
           <LiabilityStandalonePanel
             data={liabilityData}
+            uploadVersion={liabilityUploadVersion}
           />
         )}
       </main>

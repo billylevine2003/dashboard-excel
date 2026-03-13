@@ -1,9 +1,10 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import DataTable from './DataTable'
 import closabilityConfig from '../config/closability-config.json'
 
 interface LiabilityStandalonePanelProps {
   data: any[]
+  uploadVersion?: number
 }
 
 type LiabilitySegment = 'collision' | 'pd' | 'other'
@@ -133,9 +134,15 @@ const getSegmentFromRow = (row: Record<string, unknown>, perilColumns: string[])
 const formatInteger = (value: number): string =>
   new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(value)
 
-export default function LiabilityStandalonePanel({ data }: LiabilityStandalonePanelProps) {
-  const [collapsed, setCollapsed] = useState(false)
+export default function LiabilityStandalonePanel({ data, uploadVersion = 0 }: LiabilityStandalonePanelProps) {
+  const [collapsed, setCollapsed] = useState(true)
   const columns = data.length > 0 ? Object.keys(data[0]) : []
+
+  useEffect(() => {
+    if (uploadVersion > 0) {
+      setCollapsed(false)
+    }
+  }, [uploadVersion])
   const statusColumn = findColumn(columns, [
     'Liability Status',
     'Claim Status',
