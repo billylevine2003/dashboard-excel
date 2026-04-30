@@ -130,6 +130,8 @@ const getAgeInDaysFromReportDate = (value: unknown): number | null => {
 export default function KeyMetrics({ data, onDrillDown }: KeyMetricsProps) {
   const [collapsed, setCollapsed] = useState(false)
 
+  const columns = useMemo(() => (data && data.length > 0 ? Object.keys(data[0]) : []), [data])
+
   const getDrilldownProps = (target: MatrixDrilldownTarget) => {
     if (!onDrillDown) {
       return {}
@@ -151,8 +153,6 @@ export default function KeyMetrics({ data, onDrillDown }: KeyMetricsProps) {
   if (!data || data.length === 0) {
     return null
   }
-
-  const columns = useMemo(() => (data.length > 0 ? Object.keys(data[0]) : []), [data])
 
   const defaultClaimNumberColumn = findColumn(columns, ['Claim Number']) ?? ''
   const defaultDirectLossPaidColumn = findColumn(columns, [
