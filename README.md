@@ -223,5 +223,5 @@ If `VITE_OPENAI_API_KEY` is not set, the app automatically falls back to a local
 |---|---|
 | `npm install` | Install/update all dependencies |
 | `npm run dev` | Start the local dev server at `http://localhost:3000` |
-| `npm run build` | Build an optimised production bundle |
+| `npm run build` | Build an optimized production bundle |
 | `npm run preview` | Preview the production build locally |
