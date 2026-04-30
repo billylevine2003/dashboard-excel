@@ -1,0 +1,21 @@
+Claim Number,Claim Status,Claim Reported Date,Direct Loss Paid ITD,Direct Loss Reserve Outstanding,Adjuster,Peril Description,Cause of Loss,Cause of Loss Subcode,Claim Component Status Code
+CLM-001,Open,2024-01-15,0,12500,J.Smith,Wind,Wind Storm,Tornado,O
+CLM-002,Open,2024-01-22,3200,8750,J.Smith,Water,Water Damage,Plumbing Leak,O
+CLM-003,Closed,2024-02-03,15000,0,M.Johnson,Fire,Structure Fire,Electrical,C
+CLM-004,Open,2024-02-10,500,22000,M.Johnson,Wind,Wind Storm,Hail,O
+CLM-005,Closed,2024-02-18,9800,0,A.Williams,Water,Flood,Heavy Rain,C
+CLM-006,Open,2024-03-05,0,5400,A.Williams,Fire,Wildfire,Embers,O
+CLM-007,Open,2024-03-12,1100,18300,J.Smith,Wind,Wind Storm,Straightline Winds,O
+CLM-008,Closed,2024-03-20,27500,0,M.Johnson,Water,Water Damage,Roof Leak,C
+CLM-009,Open,2024-04-01,4600,9200,A.Williams,Wind,Hailstorm,Large Hail,O
+CLM-010,Closed,2024-04-08,6700,0,J.Smith,Water,Flood,Sewer Backup,C
+CLM-011,Open,2024-04-15,0,31000,M.Johnson,Fire,Structure Fire,Gas Leak,O
+CLM-012,Open,2024-04-22,2300,14600,A.Williams,Wind,Wind Storm,Tornado,O
+CLM-013,Closed,2024-05-01,11200,0,J.Smith,Water,Water Damage,Appliance Leak,C
+CLM-014,Open,2024-05-10,800,7800,M.Johnson,Wind,Hailstorm,Large Hail,O
+CLM-015,Open,2024-05-18,0,19500,A.Williams,Fire,Wildfire,Debris,O
+CLM-016,Closed,2024-06-02,33000,0,J.Smith,Water,Flood,Flash Flood,C
+CLM-017,Open,2024-06-10,5100,11200,M.Johnson,Wind,Wind Storm,Straightline Winds,O
+CLM-018,Closed,2024-06-20,8900,0,A.Williams,Fire,Structure Fire,Electrical,C
+CLM-019,Open,2024-07-04,0,6300,J.Smith,Water,Water Damage,Plumbing Leak,O
+CLM-020,Open,2024-07-15,1500,25000,M.Johnson,Wind,Wind Storm,Hail,O
